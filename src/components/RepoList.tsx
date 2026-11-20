@@ -1,4 +1,5 @@
-import { FolderGit2, FolderOpen, GitBranch, MoreHorizontal, RefreshCw, Search } from "lucide-react";
+import { useEffect, useRef } from "react";
+import { FolderGit2, FolderOpen, GitBranch, RefreshCw, Search } from "lucide-react";
 import type { RepoInfo } from "../types";
 
 interface Props {
@@ -35,6 +36,13 @@ export default function RepoList({
       repo.name.toLowerCase().includes(keyword) ||
       repo.path.toLowerCase().includes(keyword),
   );
+  const allSelected = repos.length > 0 && repos.every((repo) => selected.has(repo.id));
+  const partial = selected.size > 0 && !allSelected;
+  const masterRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (masterRef.current) masterRef.current.indeterminate = partial;
+  }, [partial]);
 
   return (
     <aside className="sidebar">
@@ -58,10 +66,28 @@ export default function RepoList({
           spellCheck={false}
         />
       </div>
-      <div className="side-sub">
-        <span>工作区</span>
-        <span>已选 {selected.size}</span>
+
+      <div className="select-bar">
+        <label className="master">
+          <input
+            ref={masterRef}
+            type="checkbox"
+            checked={allSelected}
+            onChange={() => onSelectMany(allSelected ? [] : repos.map((repo) => repo.id))}
+          />
+          <span>
+            {allSelected ? "取消全选" : partial ? `全选（已选 ${selected.size}）` : "全选"}
+          </span>
+        </label>
+        <button
+          type="button"
+          className="link"
+          onClick={() => onSelectMany(repos.filter((repo) => repo.changes > 0).map((repo) => repo.id))}
+        >
+          仅选有变更
+        </button>
       </div>
+
       <div className="repo-list">
         {visible.map((repo) => {
           const checked = selected.has(repo.id);
@@ -103,20 +129,6 @@ export default function RepoList({
             {repos.length ? "没有匹配的仓库" : loading ? "正在扫描工作区…" : "该工作区没有 Git 仓库"}
           </div>
         )}
-      </div>
-      <div className="side-foot">
-        <button type="button" onClick={() => onSelectMany(repos.map((repo) => repo.id))}>
-          全选
-        </button>
-        <button
-          type="button"
-          onClick={() => onSelectMany(repos.filter((repo) => repo.changes > 0).map((repo) => repo.id))}
-        >
-          仅选有变更
-        </button>
-        <button type="button" className="icon-only" title="更多">
-          <MoreHorizontal size={14} />
-        </button>
       </div>
     </aside>
   );

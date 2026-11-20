@@ -1,15 +1,23 @@
-import { FileDiff } from "lucide-react";
-import type { ChangedFile } from "../types";
+import { FileDiff, FolderGit2, GitBranch } from "lucide-react";
+import type { ChangedFile, RepoInfo } from "../types";
+
+export interface RepoChanges {
+  repo: RepoInfo;
+  files: ChangedFile[];
+  loaded: boolean;
+}
 
 interface Props {
-  files: ChangedFile[];
+  groups: RepoChanges[];
+  activeRepoId: string;
   activeFile: string;
   busy: boolean;
-  hasActive: boolean;
+  multi: boolean;
   commitMsg: string;
   amend: boolean;
-  onSelectFile: (file: ChangedFile) => void;
-  onToggleStage: (file: ChangedFile, staged: boolean) => void;
+  onActivateRepo: (repo: RepoInfo) => void;
+  onSelectFile: (repo: RepoInfo, file: ChangedFile) => void;
+  onToggleStage: (repo: RepoInfo, file: ChangedFile, staged: boolean) => void;
   onCommit: () => void;
   onCommitAndPush: () => void;
   onCommitMsg: (value: string) => void;
@@ -17,12 +25,14 @@ interface Props {
 }
 
 export default function ChangesPane({
-  files,
+  groups,
+  activeRepoId,
   activeFile,
   busy,
-  hasActive,
+  multi,
   commitMsg,
   amend,
+  onActivateRepo,
   onSelectFile,
   onToggleStage,
   onCommit,
@@ -30,57 +40,70 @@ export default function ChangesPane({
   onCommitMsg,
   onAmend,
 }: Props) {
-  const counts = files.reduce(
-    (acc, file) => {
-      acc[file.status] = (acc[file.status] ?? 0) + 1;
-      return acc;
-    },
-    {} as Record<string, number>,
-  );
+  const totalFiles = groups.reduce((sum, group) => sum + group.files.length, 0);
+  const hasRepo = groups.length > 0;
 
   return (
     <div className="pane active">
       <div className="scroll">
-        {files.length > 0 && (
-          <div className="files-summary">
+        {multi && (
+          <div className="multi-hint">
             <span>
-              已暂存 {files.filter((file) => file.staged).length} · 未暂存{" "}
-              {files.filter((file) => !file.staged).length}
+              已选 {groups.length} 个仓库 · 共 {totalFiles} 个变更文件
             </span>
-            <span className="file-counts">
-              {(["M", "A", "D", "R", "U"] as const)
-                .filter((status) => counts[status])
-                .map((status) => (
-                  <span key={status} className={`fstat ${status}`}>
-                    {counts[status]}
-                    {status}
-                  </span>
-                ))}
-            </span>
+            <span className="muted">变更按仓库分组，点击文件查看差异</span>
           </div>
         )}
-        {files.map((file) => (
-          <div
-            key={`${file.path}-${file.status}`}
-            className={`file-row${file.path === activeFile ? " active" : ""}`}
-            onClick={() => onSelectFile(file)}
-          >
-            <label className="cb" onClick={(event) => event.stopPropagation()}>
-              <input
-                type="checkbox"
-                checked={file.staged}
-                onChange={(event) => onToggleStage(file, event.target.checked)}
-              />
-            </label>
-            <span className={`fstat ${file.status}`}>{file.status}</span>
-            <span className="fname">{file.path.split("/").pop()}</span>
-            <span className="fdir">{file.path.includes("/") ? file.path.slice(0, file.path.lastIndexOf("/")) : ""}</span>
+        {groups.map((group) => (
+          <div key={group.repo.id} className="repo-group">
+            {multi && (
+              <div
+                className={`repo-group-head${group.repo.id === activeRepoId ? " active" : ""}`}
+                onClick={() => onActivateRepo(group.repo)}
+              >
+                <FolderGit2 size={13} />
+                <span className="gname">{group.repo.name}</span>
+                <span className="gbranch">
+                  <GitBranch size={10} />
+                  {group.repo.branch}
+                </span>
+                {group.repo.state === "conflict" && <span className="chip danger">冲突</span>}
+                <span className="gcount">
+                  {group.loaded ? `${group.files.length} 个变更` : "读取中…"}
+                </span>
+              </div>
+            )}
+            {group.files.map((file) => (
+              <div
+                key={`${group.repo.id}-${file.path}-${file.status}`}
+                className={`file-row${
+                  group.repo.id === activeRepoId && file.path === activeFile ? " active" : ""
+                }`}
+                onClick={() => onSelectFile(group.repo, file)}
+              >
+                <label className="cb" onClick={(event) => event.stopPropagation()}>
+                  <input
+                    type="checkbox"
+                    checked={file.staged}
+                    onChange={(event) => onToggleStage(group.repo, file, event.target.checked)}
+                  />
+                </label>
+                <span className={`fstat ${file.status}`}>{file.status}</span>
+                <span className="fname">{file.path.split("/").pop()}</span>
+                <span className="fdir">
+                  {file.path.includes("/") ? file.path.slice(0, file.path.lastIndexOf("/")) : ""}
+                </span>
+              </div>
+            ))}
+            {group.loaded && !group.files.length && (
+              <div className="group-empty">工作区干净，没有待提交的变更</div>
+            )}
           </div>
         ))}
-        {!files.length && (
+        {!hasRepo && (
           <div className="pane-empty">
             <FileDiff size={22} />
-            <div>{hasActive ? "工作区干净，没有待提交的变更" : "请选择一个仓库"}</div>
+            <div>请选择一个仓库</div>
           </div>
         )}
       </div>
@@ -88,7 +111,11 @@ export default function ChangesPane({
         <textarea
           value={commitMsg}
           onChange={(event) => onCommitMsg(event.target.value)}
-          placeholder="提交信息（⌘/Ctrl + Enter 提交）"
+          placeholder={
+            multi
+              ? `提交信息（将提交到 ${groups.length} 个选中仓库，⌘/Ctrl + Enter 提交）`
+              : "提交信息（⌘/Ctrl + Enter 提交）"
+          }
           spellCheck={false}
           onKeyDown={(event) => {
             if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
@@ -102,16 +129,12 @@ export default function ChangesPane({
             <input type="checkbox" checked={amend} onChange={(event) => onAmend(event.target.checked)} />
             Amend
           </label>
+          {multi && <span className="composer-scope">作用于 {groups.length} 个仓库</span>}
           <span className="spacer" />
-          <button
-            type="button"
-            className="ghost"
-            disabled={busy || !hasActive}
-            onClick={onCommitAndPush}
-          >
+          <button type="button" className="ghost" disabled={busy || !hasRepo} onClick={onCommitAndPush}>
             提交并推送
           </button>
-          <button type="button" className="commit-btn" disabled={busy || !hasActive} onClick={onCommit}>
+          <button type="button" className="commit-btn" disabled={busy || !hasRepo} onClick={onCommit}>
             提交
           </button>
         </div>

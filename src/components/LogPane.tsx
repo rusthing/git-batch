@@ -1,12 +1,21 @@
-import { GitCommit, History, RefreshCw } from "lucide-react";
-import type { Commit } from "../types";
+import { FolderGit2, GitBranch, History, RefreshCw } from "lucide-react";
+import type { Commit, RepoInfo } from "../types";
 import { relativeTime } from "../utils";
 
-interface Props {
+export interface RepoCommits {
+  repo: RepoInfo;
   commits: Commit[];
+  loaded: boolean;
+}
+
+interface Props {
+  groups: RepoCommits[];
   activeHash: string;
+  activeRepoId: string;
   loading: boolean;
-  onSelect: (commit: Commit) => void;
+  multi: boolean;
+  onActivateRepo: (repo: RepoInfo) => void;
+  onSelect: (repo: RepoInfo, commit: Commit) => void;
   onRefresh: () => void;
 }
 
@@ -30,13 +39,24 @@ function Graph({ merge }: { merge: boolean }) {
   );
 }
 
-export default function LogPane({ commits, activeHash, loading, onSelect, onRefresh }: Props) {
+export default function LogPane({
+  groups,
+  activeHash,
+  activeRepoId,
+  loading,
+  multi,
+  onActivateRepo,
+  onSelect,
+  onRefresh,
+}: Props) {
+  const total = groups.reduce((sum, group) => sum + group.commits.length, 0);
+
   return (
     <div className="pane active">
       <div className="log-filter">
         <span className="fchip on">
           <History size={12} />
-          最近 {commits.length} 条提交
+          {multi ? `已选 ${groups.length} 个仓库 · 最近 ${total} 条提交` : `最近 ${total} 条提交`}
         </span>
         <span className="spacer" />
         <button type="button" className="icon-only" title="刷新提交记录" onClick={onRefresh}>
@@ -44,45 +64,69 @@ export default function LogPane({ commits, activeHash, loading, onSelect, onRefr
         </button>
       </div>
       <div className="scroll">
-        {commits.map((commit) => (
-          <div
-            key={commit.hash}
-            className={`commit-row${commit.hash === activeHash ? " active" : ""}`}
-            onClick={() => onSelect(commit)}
-          >
-            <span className="graph">
-              <Graph merge={commit.merge} />
-            </span>
-            <div className="commit-body">
-              <div className="commit-msg">
-                {commit.subject}
-                {commit.refs.map((ref) => (
-                  <span
-                    key={ref}
-                    className={`ref${ref.startsWith("tag:") ? " tag" : ref.startsWith("origin") ? " origin" : ""}`}
-                  >
-                    {ref.replace("HEAD -> ", "")}
-                  </span>
-                ))}
+        {groups.map((group) => (
+          <div key={group.repo.id} className="commit-group">
+            {multi && (
+              <div
+                className={`repo-group-head${group.repo.id === activeRepoId ? " active" : ""}`}
+                onClick={() => onActivateRepo(group.repo)}
+              >
+                <FolderGit2 size={13} />
+                <span className="gname">{group.repo.name}</span>
+                <span className="gbranch">
+                  <GitBranch size={10} />
+                  {group.repo.branch}
+                </span>
+                <span className="gcount">
+                  {group.loaded ? `最近 ${group.commits.length} 条` : "读取中…"}
+                </span>
               </div>
-              <div className="commit-sub">
-                <span className="hash">{commit.short}</span>
-                <span>{commit.author}</span>
-                <span>·</span>
-                <span>{relativeTime(commit.time)}</span>
-                {commit.merge && (
-                  <>
+            )}
+            {group.commits.map((commit) => (
+              <div
+                key={`${group.repo.id}-${commit.hash}`}
+                className={`commit-row${
+                  group.repo.id === activeRepoId && commit.hash === activeHash ? " active" : ""
+                }`}
+                onClick={() => onSelect(group.repo, commit)}
+              >
+                <span className="graph">
+                  <Graph merge={commit.merge} />
+                </span>
+                <div className="commit-body">
+                  <div className="commit-msg">
+                    {commit.subject}
+                    {commit.refs.map((ref) => (
+                      <span
+                        key={ref}
+                        className={`ref${
+                          ref.startsWith("tag:") ? " tag" : ref.startsWith("origin") ? " origin" : ""
+                        }`}
+                      >
+                        {ref.replace("HEAD -> ", "")}
+                      </span>
+                    ))}
+                  </div>
+                  <div className="commit-sub">
+                    <span className="hash">{commit.short}</span>
+                    <span>{commit.author}</span>
                     <span>·</span>
-                    <span>merge</span>
-                  </>
-                )}
+                    <span>{relativeTime(commit.time)}</span>
+                    {commit.merge && (
+                      <>
+                        <span>·</span>
+                        <span>merge</span>
+                      </>
+                    )}
+                  </div>
+                </div>
               </div>
-            </div>
+            ))}
           </div>
         ))}
-        {!commits.length && (
+        {!groups.length && (
           <div className="pane-empty">
-            <GitCommit size={22} />
+            <History size={22} />
             <div>还没有提交记录</div>
           </div>
         )}

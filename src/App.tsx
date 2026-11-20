@@ -43,7 +43,9 @@ export default function App() {
   const [filter, setFilter] = useState("");
   const [tab, setTab] = useState<Tab>("changes");
   const [detail, setDetail] = useState<RepoDetail>(EMPTY_DETAIL);
+  const [multiDetails, setMultiDetails] = useState<Record<string, RepoDetail>>({});
   const [activeFile, setActiveFile] = useState<ChangedFile | null>(null);
+  const [fileRepoId, setFileRepoId] = useState("");
   const [diff, setDiff] = useState("");
   const [branches, setBranches] = useState<string[]>([]);
   const [commitView, setCommitView] = useState<CommitView | null>(null);
@@ -93,6 +95,7 @@ export default function App() {
       setCommitView(null);
       const file = repoData.files.find((item) => item.path === preferPath) ?? repoData.files[0] ?? null;
       setActiveFile(file);
+      setFileRepoId(file ? id : "");
       if (file) {
         const text = await api.fileDiff(id, file.path, file.staged);
         if (seq === detailSeq.current) setDiff(text);
@@ -158,6 +161,52 @@ export default function App() {
       setLoading(false);
     }
   }
+
+  const selectionKey = [...selected].sort().join("\u0000");
+
+  async function reloadMultiDetails() {
+    if (selected.size <= 1) return;
+    const ids = repos.filter((repo) => selected.has(repo.id)).map((repo) => repo.id);
+    if (!ids.length) return;
+    try {
+      const entries = await Promise.all(
+        ids.map(async (id) => [id, await api.repoDetail(id)] as const),
+      );
+      setMultiDetails(Object.fromEntries(entries) as Record<string, RepoDetail>);
+    } catch (error) {
+      pushLog("err", errorText(error));
+    }
+  }
+
+  useEffect(() => {
+    if (selected.size <= 1) {
+      setMultiDetails({});
+      return;
+    }
+    let cancelled = false;
+    const ids = repos.filter((repo) => selected.has(repo.id)).map((repo) => repo.id);
+    if (!ids.length) {
+      setMultiDetails({});
+      return;
+    }
+    void (async () => {
+      try {
+        const entries = await Promise.all(
+          ids.map(async (id) => [id, await api.repoDetail(id)] as const),
+        );
+        if (!cancelled) {
+          setMultiDetails(Object.fromEntries(entries) as Record<string, RepoDetail>);
+        }
+      } catch (error) {
+        if (!cancelled) pushLog("err", errorText(error));
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // 选中集合或仓库列表变化时重新加载多仓库视图
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectionKey, repos]);
 
   useEffect(() => {
     if (initRef.current) return;
@@ -309,13 +358,13 @@ export default function App() {
     await refreshAll();
   }
 
-  async function toggleStage(file: ChangedFile, staged: boolean) {
-    if (!activeRepo) return;
+  async function toggleStage(repo: RepoInfo, file: ChangedFile, staged: boolean) {
     setBusy(staged ? "暂存文件…" : "取消暂存…");
     try {
-      if (staged) await api.stageFile(activeRepo.path, file.path);
-      else await api.unstageFile(activeRepo.path, file.path);
-      await loadDetail(activeRepo.id, file.path);
+      if (staged) await api.stageFile(repo.path, file.path);
+      else await api.unstageFile(repo.path, file.path);
+      if (repo.id === activeId) await loadDetail(repo.id, file.path);
+      await reloadMultiDetails();
     } catch (error) {
       pushLog("err", errorText(error));
       notify(errorText(error), "err");
@@ -333,6 +382,7 @@ export default function App() {
       pushLog("warn", `[回滚] ${activeRepo.name}：${file.path}`);
       notify("已回滚 " + file.path, "warn");
       await loadDetail(activeRepo.id);
+      await reloadMultiDetails();
     } catch (error) {
       pushLog("err", errorText(error));
       notify(errorText(error), "err");
@@ -341,24 +391,33 @@ export default function App() {
     }
   }
 
-  async function selectFile(file: ChangedFile) {
-    if (!activeRepo) return;
+  async function selectFile(repo: RepoInfo, file: ChangedFile) {
+    if (repo.id !== activeId) {
+      setActiveId(repo.id);
+      await loadDetail(repo.id, file.path);
+      return;
+    }
     setActiveFile(file);
+    setFileRepoId(repo.id);
     setCommitView(null);
     try {
-      setDiff(await api.fileDiff(activeRepo.path, file.path, file.staged));
+      setDiff(await api.fileDiff(repo.path, file.path, file.staged));
     } catch (error) {
       pushLog("err", errorText(error));
     }
   }
 
-  async function openCommit(commit: Commit) {
-    if (!activeRepo) return;
+  async function openCommit(repo: RepoInfo, commit: Commit) {
+    if (repo.id !== activeId) {
+      setActiveId(repo.id);
+      setActiveFile(null);
+      setFileRepoId("");
+    }
     try {
-      const files = await api.commitFiles(activeRepo.path, commit.hash);
+      const files = await api.commitFiles(repo.path, commit.hash);
       const first = files[0]?.path ?? "";
       setCommitView({ commit, files, file: first });
-      setDiff(first ? await api.commitDiff(activeRepo.path, commit.hash, first) : "");
+      setDiff(first ? await api.commitDiff(repo.path, commit.hash, first) : "");
     } catch (error) {
       pushLog("err", errorText(error));
       notify(errorText(error), "err");
@@ -396,8 +455,12 @@ export default function App() {
     setTab(next);
     if (next !== "log" && commitView) {
       setCommitView(null);
-      if (activeRepo && activeFile) {
-        void api.fileDiff(activeRepo.path, activeFile.path, activeFile.staged).then(setDiff);
+      if (activeRepo) {
+        if (activeFile && fileRepoId === activeRepo.id) {
+          void api.fileDiff(activeRepo.path, activeFile.path, activeFile.staged).then(setDiff);
+        } else {
+          void loadDetail(activeRepo.id);
+        }
       }
     }
   }
@@ -419,6 +482,30 @@ export default function App() {
       notify(errorText(error), "err");
     }
   }
+
+  const selectedRepos = repos.filter((repo) => selected.has(repo.id));
+  const isMulti = selectedRepos.length > 1;
+  const changeGroups = isMulti
+    ? selectedRepos.map((repo) => ({
+        repo,
+        files: multiDetails[repo.id]?.files ?? [],
+        loaded: !!multiDetails[repo.id],
+      }))
+    : activeRepo
+      ? [{ repo: activeRepo, files: detail.files, loaded: true }]
+      : [];
+  const commitGroups = isMulti
+    ? selectedRepos.map((repo) => ({
+        repo,
+        commits: multiDetails[repo.id]?.commits ?? [],
+        loaded: !!multiDetails[repo.id],
+      }))
+    : activeRepo
+      ? [{ repo: activeRepo, commits: detail.commits, loaded: true }]
+      : [];
+  const totalFiles = changeGroups.reduce((sum, group) => sum + group.files.length, 0);
+  const totalCommits = commitGroups.reduce((sum, group) => sum + group.commits.length, 0);
+  const multiLoading = isMulti && selectedRepos.some((repo) => !multiDetails[repo.id]);
 
   const inspectorMode = commitView ? "commit" : activeFile ? "file" : "empty";
 
@@ -461,25 +548,44 @@ export default function App() {
             <>
               <div className="repo-head">
                 <div className="repo-title">
-                  <span className="repo-name">{activeRepo.name}</span>
-                  <span className="repo-path" title={activeRepo.path}>
-                    {activeRepo.path}
+                  <span className="repo-name">
+                    {isMulti ? `${selectedRepos.length} 个仓库` : activeRepo.name}
+                  </span>
+                  <span className="repo-path" title={isMulti ? undefined : activeRepo.path}>
+                    {isMulti ? "变更与提交记录按仓库分组展示" : activeRepo.path}
                   </span>
                 </div>
                 <div className="repo-meta">
-                  {activeRepo.ahead > 0 && (
-                    <span className="chip up">↑ {activeRepo.ahead} 待推送</span>
+                  {isMulti ? (
+                    <>
+                      {targetAhead > 0 && <span className="chip up">↑ {targetAhead} 待推送</span>}
+                      {targetBehind > 0 && <span className="chip down">↓ {targetBehind} 待拉取</span>}
+                      <span className="chip">
+                        {selectedRepos.length} 个仓库 · {totalFiles} 个变更
+                      </span>
+                      {selectedRepos.some((repo) => repo.state === "conflict") && (
+                        <span className="chip danger">
+                          <AlertTriangle size={11} /> 含冲突仓库
+                        </span>
+                      )}
+                    </>
+                  ) : (
+                    <>
+                      {activeRepo.ahead > 0 && (
+                        <span className="chip up">↑ {activeRepo.ahead} 待推送</span>
+                      )}
+                      {activeRepo.behind > 0 && (
+                        <span className="chip down">↓ {activeRepo.behind} 待拉取</span>
+                      )}
+                      {activeRepo.state === "conflict" && (
+                        <span className="chip danger">
+                          <AlertTriangle size={11} /> 存在冲突
+                        </span>
+                      )}
+                      {activeRepo.state === "clean" && <span className="chip">工作区干净</span>}
+                    </>
                   )}
-                  {activeRepo.behind > 0 && (
-                    <span className="chip down">↓ {activeRepo.behind} 待拉取</span>
-                  )}
-                  {activeRepo.state === "conflict" && (
-                    <span className="chip danger">
-                      <AlertTriangle size={11} /> 存在冲突
-                    </span>
-                  )}
-                  {activeRepo.state === "clean" && <span className="chip">工作区干净</span>}
-                  {detailLoading && <span className="chip">读取中…</span>}
+                  {(detailLoading || multiLoading) && <span className="chip">读取中…</span>}
                 </div>
               </div>
 
@@ -487,7 +593,7 @@ export default function App() {
                 <div className="batch-banner">
                   <Layers size={13} />
                   <span>
-                    工具栏与批量提交将作用于 <b>{selected.size}</b> 个选中仓库
+                    已选 <b>{selected.size}</b> 个仓库，变更与提交记录按仓库分组；工具栏与批量提交作用于全部选中项
                   </span>
                   <button type="button" className="clear" onClick={() => setSelected(new Set<string>())}>
                     清除选择
@@ -501,14 +607,14 @@ export default function App() {
                   className={`tab${tab === "changes" ? " active" : ""}`}
                   onClick={() => changeTab("changes")}
                 >
-                  变更 <span className="count">{detail.files.length}</span>
+                  变更 <span className="count">{totalFiles}</span>
                 </button>
                 <button
                   type="button"
                   className={`tab${tab === "log" ? " active" : ""}`}
                   onClick={() => changeTab("log")}
                 >
-                  提交记录 <span className="count">{detail.commits.length}</span>
+                  提交记录 <span className="count">{totalCommits}</span>
                 </button>
                 <button
                   type="button"
@@ -520,21 +626,23 @@ export default function App() {
                 <span className="spacer" />
                 <span className="tab-hint">
                   <Terminal size={11} />
-                  {activeRepo.branch}
+                  {isMulti ? `${selectedRepos.length} 个仓库` : activeRepo.branch}
                 </span>
               </div>
 
               <div className="pane-wrap">
                 {tab === "changes" && (
                   <ChangesPane
-                    files={detail.files}
+                    groups={changeGroups}
+                    activeRepoId={activeId}
                     activeFile={activeFile?.path ?? ""}
                     busy={!!busy}
-                    hasActive={!!activeRepo}
+                    multi={isMulti}
                     commitMsg={commitMsg}
                     amend={amend}
-                    onSelectFile={(file) => void selectFile(file)}
-                    onToggleStage={(file, staged) => void toggleStage(file, staged)}
+                    onActivateRepo={(repo) => activateRepo(repo.id)}
+                    onSelectFile={(repo, file) => void selectFile(repo, file)}
+                    onToggleStage={(repo, file, staged) => void toggleStage(repo, file, staged)}
                     onCommit={() => void commit(false)}
                     onCommitAndPush={() => void commit(true)}
                     onCommitMsg={setCommitMsg}
@@ -543,11 +651,17 @@ export default function App() {
                 )}
                 {tab === "log" && (
                   <LogPane
-                    commits={detail.commits}
+                    groups={commitGroups}
                     activeHash={commitView?.commit.hash ?? ""}
-                    loading={detailLoading}
-                    onSelect={(commit) => void openCommit(commit)}
-                    onRefresh={() => void loadDetail(activeRepo.id, activeFile?.path)}
+                    activeRepoId={activeId}
+                    loading={detailLoading || multiLoading}
+                    multi={isMulti}
+                    onActivateRepo={(repo) => activateRepo(repo.id)}
+                    onSelect={(repo, commit) => void openCommit(repo, commit)}
+                    onRefresh={() => {
+                      if (isMulti) void reloadMultiDetails();
+                      if (activeRepo) void loadDetail(activeRepo.id, activeFile?.path);
+                    }}
                   />
                 )}
                 {tab === "console" && (
@@ -577,8 +691,8 @@ export default function App() {
           commitFiles={commitView?.files ?? []}
           commitFile={commitView?.file ?? ""}
           busy={!!busy}
-          onStage={() => activeFile && void toggleStage(activeFile, true)}
-          onUnstage={() => activeFile && void toggleStage(activeFile, false)}
+          onStage={() => activeRepo && activeFile && void toggleStage(activeRepo, activeFile, true)}
+          onUnstage={() => activeRepo && activeFile && void toggleStage(activeRepo, activeFile, false)}
           onDiscard={() => activeFile && void discard(activeFile)}
           onSelectCommitFile={(file) => void selectCommitFile(file)}
           onOpenRepo={() => void openRepository()}

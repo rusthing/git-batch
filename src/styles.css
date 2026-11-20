@@ -435,44 +435,75 @@ textarea {
   line-height: 1.7;
 }
 
-.side-foot {
-  border-top: 1px solid var(--border-soft);
+.select-bar {
+  height: 28px;
   display: flex;
-  gap: 4px;
-  padding: 6px 8px;
-  background: var(--panel-soft);
-  flex: none;
-}
-
-.side-foot button {
-  flex: 1;
-  height: 24px;
-  border-radius: 4px;
-  border: 1px solid var(--border);
-  color: var(--text-sub);
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px;
+  border-bottom: 1px solid var(--border-soft);
   font-size: 11.5px;
-}
-
-.side-foot button:hover {
-  background: var(--hover);
-  color: var(--text);
-}
-
-.side-foot button.icon-only {
-  flex: 0 0 26px;
-  display: grid;
-  place-items: center;
-}
-
-.side-path {
-  padding: 0 10px 7px;
-  font-family: var(--mono);
-  font-size: 10px;
-  color: #5f646c;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  color: var(--text-sub);
   flex: none;
+}
+
+.select-bar .master {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.select-bar .master input {
+  appearance: none;
+  width: 13px;
+  height: 13px;
+  border: 1.5px solid #6b7078;
+  border-radius: 3px;
+  margin: 0;
+  cursor: pointer;
+  position: relative;
+  background: transparent;
+  flex: none;
+}
+
+.select-bar .master input:checked,
+.select-bar .master input:indeterminate {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.select-bar .master input:checked::after {
+  content: "";
+  position: absolute;
+  left: 3.4px;
+  top: 1px;
+  width: 3px;
+  height: 6.5px;
+  border: solid #fff;
+  border-width: 0 1.6px 1.6px 0;
+  transform: rotate(45deg);
+}
+
+.select-bar .master input:indeterminate::after {
+  content: "";
+  position: absolute;
+  left: 2.5px;
+  top: 5px;
+  width: 6px;
+  height: 1.5px;
+  background: #fff;
+}
+
+.select-bar .link {
+  margin-left: auto;
+  color: #9dbcf5;
+  font-size: 11px;
+}
+
+.select-bar .link:hover {
+  text-decoration: underline;
 }
 
 /* ---------- 中间工作区 ---------- */
@@ -814,30 +845,91 @@ textarea {
 }
 
 /* 变更列表 */
-.files-summary {
-  height: 24px;
+.multi-hint {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  height: 26px;
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 10px;
   padding: 0 14px;
-  color: var(--text-dim);
-  font-size: 11px;
+  background: var(--panel-soft);
   border-bottom: 1px solid var(--border-soft);
+  font-size: 11px;
+  color: var(--text-sub);
+}
+
+.multi-hint .muted {
+  color: var(--text-dim);
+}
+
+.repo-group-head {
   position: sticky;
   top: 0;
-  background: var(--editor);
   z-index: 2;
-}
-
-.file-counts {
+  height: 28px;
   display: flex;
-  gap: 8px;
-  font-family: var(--mono);
+  align-items: center;
+  gap: 7px;
+  padding: 0 14px;
+  background: #25282c;
+  border-top: 1px solid var(--border-soft);
+  border-bottom: 1px solid var(--border-soft);
+  font-size: 11.5px;
+  color: var(--text-sub);
+  cursor: pointer;
 }
 
-.file-counts .fstat {
-  width: auto;
+.multi-hint ~ .repo-group .repo-group-head {
+  top: 26px;
+}
+
+.repo-group-head:hover {
+  background: #2a2d31;
+}
+
+.repo-group-head.active {
+  color: #cfe0ff;
+  border-left: 2px solid var(--accent);
+  padding-left: 12px;
+}
+
+.repo-group-head .gname {
+  font-weight: 600;
+  color: #dfe1e5;
+}
+
+.repo-group-head .gbranch {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  font-family: var(--mono);
   font-size: 10.5px;
+  color: var(--text-dim);
+}
+
+.repo-group-head .gcount {
+  margin-left: auto;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--text-dim);
+}
+
+.group-empty {
+  padding: 7px 14px 9px;
+  font-size: 11px;
+  color: var(--text-dim);
+  border-bottom: 1px solid var(--border-soft);
+}
+
+.composer-scope {
+  font-size: 10.5px;
+  color: #9dbcf5;
+  background: var(--accent-soft);
+  border-radius: 3px;
+  padding: 1px 6px;
 }
 
 .file-row {
