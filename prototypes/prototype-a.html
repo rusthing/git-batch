@@ -1,0 +1,662 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>git-batch · 原型 A · IDEA 工作台</title>
+<style>
+  :root{
+    --bg:#1e1f22; --panel:#2b2d30; --panel-soft:#26282b; --editor:#1e1f22;
+    --border:#393b40; --border-soft:#303236; --hover:#393b40; --selected:#2e436e;
+    --text:#dfe1e5; --text-sub:#a8adb5; --text-dim:#7f858e;
+    --accent:#3574f0; --accent-hover:#4a82f2; --accent-soft:rgba(53,116,240,.16);
+    --green:#5bab63; --blue:#4d8ff0; --red:#db5c5c; --amber:#e0a03c; --violet:#a571d7;
+    --ui:-apple-system,"SF Pro Text","Segoe UI","PingFang SC","Hiragino Sans GB",sans-serif;
+    --mono:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%;margin:0}
+  body{background:var(--bg);color:var(--text);font:12.5px/1.45 var(--ui);-webkit-font-smoothing:antialiased;overflow:hidden}
+  button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer}
+  input{font:inherit}
+  .ico{vertical-align:-2px;flex:none}
+  .app{display:flex;flex-direction:column;height:100vh;min-width:1120px}
+
+  /* ---------- 标题栏 ---------- */
+  .titlebar{height:38px;display:flex;align-items:center;gap:14px;padding:0 12px;background:var(--panel-soft);border-bottom:1px solid var(--border);user-select:none}
+  .traffic{display:flex;gap:8px}
+  .traffic i{width:12px;height:12px;border-radius:50%;background:#4b4d52;display:block}
+  .traffic i:nth-child(1){background:#ec6a5f}.traffic i:nth-child(2){background:#f4bf4f}.traffic i:nth-child(3){background:#61c554}
+  .brand{display:flex;align-items:center;gap:8px;font-size:12.5px;font-weight:600;letter-spacing:.2px}
+  .brand .logo{width:20px;height:20px;border-radius:5px;background:linear-gradient(160deg,#4d8ff0,#2f5fd0);display:grid;place-items:center;color:#fff}
+  .brand small{font-weight:400;color:var(--text-dim);font-size:11.5px;letter-spacing:0}
+  .title-tabs{display:flex;gap:2px;margin-left:10px}
+  .title-tabs span{padding:3px 9px;border-radius:5px;color:var(--text-dim);font-size:12px}
+  .title-tabs span.on{background:#35373b;color:var(--text)}
+  .titlebar .spacer{flex:1}
+  .win-actions{display:flex;gap:10px;color:var(--text-dim)}
+
+  /* ---------- 主区 ---------- */
+  .main{flex:1;display:grid;grid-template-columns:246px minmax(0,1fr) 340px;min-height:0}
+
+  /* 左侧仓库树 */
+  .sidebar{background:var(--panel);border-right:1px solid var(--border);display:flex;flex-direction:column;min-height:0}
+  .side-head{height:36px;display:flex;align-items:center;gap:6px;padding:0 10px;border-bottom:1px solid var(--border-soft);font-weight:600;font-size:12px}
+  .side-head .pill{background:#3a3d42;color:var(--text-sub);border-radius:9px;padding:0 6px;font-size:10.5px;font-weight:500;line-height:16px}
+  .side-head .spacer{flex:1}
+  .mini{width:22px;height:22px;border-radius:4px;display:grid;place-items:center;color:var(--text-dim)}
+  .mini:hover{background:var(--hover);color:var(--text)}
+  .side-search{display:flex;align-items:center;gap:6px;margin:8px 8px 4px;padding:0 7px;height:26px;border:1px solid var(--border);border-radius:5px;background:#26282b;color:var(--text-dim)}
+  .side-search input{border:0;outline:0;background:none;color:var(--text);width:100%;font-size:12px}
+  .side-search input::placeholder{color:#6b7078}
+  .side-sub{display:flex;justify-content:space-between;padding:6px 12px 4px;font-size:11px;color:var(--text-dim);letter-spacing:.2px}
+  .repo-list{flex:1;overflow:auto;padding:2px 6px 8px}
+  .repo-row{display:flex;align-items:flex-start;gap:7px;padding:5px 6px;border-radius:5px;cursor:pointer;position:relative}
+  .repo-row:hover{background:#323438}
+  .repo-row.active{background:var(--selected)}
+  .repo-row.active .repo-sub{color:#c3d4f5}
+  .repo-row.active .rname{color:#fff}
+  .repo-row .cb{width:14px;height:14px;margin-top:2px;flex:none;display:grid;place-items:center}
+  .repo-row .cb input{appearance:none;width:13px;height:13px;border:1.5px solid #6b7078;border-radius:3px;margin:0;cursor:pointer;position:relative;background:transparent}
+  .repo-row .cb input:checked{background:var(--accent);border-color:var(--accent)}
+  .repo-row .cb input:checked::after{content:"";position:absolute;left:3.5px;top:1px;width:3px;height:6.5px;border:solid #fff;border-width:0 1.6px 1.6px 0;transform:rotate(45deg)}
+  .repo-icon{color:#8f959d;margin-top:1px}
+  .repo-row.active .repo-icon{color:#c9d7f5}
+  .repo-main{min-width:0;flex:1}
+  .repo-line{display:flex;align-items:center;gap:6px}
+  .rname{font-size:12.5px;color:#d4d7dc;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .repo-row.active .rname{font-weight:500}
+  .chg{margin-left:auto;font-family:var(--mono);font-size:10.5px;color:#0f1113;background:#c7ccd4;border-radius:8px;padding:0 5px;line-height:15px;flex:none}
+  .repo-row.active .chg{background:#cfe0ff}
+  .repo-sub{display:flex;align-items:center;gap:4px;font-size:11px;color:var(--text-dim);margin-top:1px;white-space:nowrap;overflow:hidden}
+  .state-dot{width:6px;height:6px;border-radius:50%;flex:none;margin-top:5px}
+  .state-dirty{background:var(--blue)}
+  .state-conflict{background:var(--red)}
+  .state-clean{background:transparent;border:1px solid #5a5e64}
+  .state-paused{background:#5a5e64}
+  .side-foot{border-top:1px solid var(--border-soft);display:flex;gap:4px;padding:6px 8px;background:var(--panel-soft)}
+  .side-foot button{flex:1;height:24px;border-radius:4px;border:1px solid var(--border);color:var(--text-sub);font-size:11.5px}
+  .side-foot button:hover{background:var(--hover);color:var(--text)}
+
+  /* 中间工作区 */
+  .work{display:flex;flex-direction:column;min-width:0;background:var(--editor)}
+  .toolbar{height:40px;display:flex;align-items:center;gap:4px;padding:0 10px;border-bottom:1px solid var(--border);background:var(--panel-soft)}
+  .tbtn{display:flex;align-items:center;gap:5px;height:26px;padding:0 8px;border-radius:5px;color:var(--text-sub);font-size:12px;white-space:nowrap}
+  .tbtn:hover{background:var(--hover);color:var(--text)}
+  .tbtn .ico{color:#9aa0a8}
+  .tbtn:hover .ico{color:var(--text)}
+  .tbtn .num{font-family:var(--mono);font-size:10.5px;color:var(--text-dim);background:#35373b;border-radius:7px;padding:0 4px;line-height:14px}
+  .tb-sep{width:1px;height:18px;background:var(--border);margin:0 5px}
+  .branch-pill{display:flex;align-items:center;gap:6px;height:26px;padding:0 9px;border:1px solid var(--border);border-radius:5px;background:#26282b;color:#cfd3d9;font-family:var(--mono);font-size:11.5px}
+  .branch-pill:hover{border-color:#4b4e54}
+  .toolbar .spacer{flex:1}
+  .primary{display:flex;align-items:center;gap:6px;height:26px;padding:0 12px;border-radius:5px;background:var(--accent);color:#fff;font-size:12px}
+  .primary:hover{background:var(--accent-hover)}
+  kbd{font-family:var(--mono);font-size:10px;background:rgba(255,255,255,.18);border-radius:3px;padding:1px 4px}
+
+  .repo-head{display:flex;align-items:center;gap:12px;padding:9px 14px 7px;border-bottom:1px solid var(--border-soft)}
+  .repo-title{display:flex;align-items:baseline;gap:9px;min-width:0}
+  .repo-name{font-size:14px;font-weight:600;letter-spacing:.1px}
+  .repo-path{font-family:var(--mono);font-size:11px;color:var(--text-dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .repo-meta{display:flex;align-items:center;gap:7px;margin-left:auto}
+  .chip{display:inline-flex;align-items:center;gap:4px;height:20px;padding:0 7px;border-radius:4px;background:#303236;color:var(--text-sub);font-size:11px}
+  .chip.mono{font-family:var(--mono)}
+  .chip.up{color:#8fc7a2;background:rgba(91,171,99,.14)}
+  .chip.down{color:#9dbcf5;background:rgba(77,143,240,.14)}
+  .chip.danger{color:#f2a1a1;background:rgba(219,92,92,.15)}
+  .batch-banner{display:none;align-items:center;gap:8px;margin:8px 14px 0;padding:6px 10px;border:1px solid rgba(53,116,240,.45);background:var(--accent-soft);border-radius:5px;font-size:12px;color:#bcd2fb}
+  .batch-banner.show{display:flex}
+  .batch-banner b{color:#fff}
+  .batch-banner .clear{margin-left:auto;color:#9dbcf5;font-size:11.5px}
+  .batch-banner .clear:hover{color:#fff;text-decoration:underline}
+
+  .tabs{display:flex;align-items:center;gap:2px;padding:6px 12px 0;border-bottom:1px solid var(--border)}
+  .tab{display:flex;align-items:center;gap:6px;padding:5px 10px;border-radius:5px 5px 0 0;color:var(--text-dim);font-size:12px;border-bottom:2px solid transparent;margin-bottom:-1px}
+  .tab:hover{color:var(--text)}
+  .tab.active{color:var(--text);background:#26282b;border-bottom-color:var(--accent)}
+  .tab .count{font-family:var(--mono);font-size:10px;background:#3a3d42;color:#c7cbd2;border-radius:7px;padding:0 4px;line-height:14px}
+  .tabs .spacer{flex:1}
+  .tabs .tool{color:var(--text-dim);height:24px;width:24px;border-radius:4px;display:grid;place-items:center;margin-bottom:3px}
+  .tabs .tool:hover{background:var(--hover);color:var(--text)}
+
+  .pane-wrap{flex:1;min-height:0;display:flex;flex-direction:column;position:relative}
+  .pane{display:none;flex:1;min-height:0;flex-direction:column}
+  .pane.active{display:flex}
+  .pane > .scroll{flex:1;overflow:auto;min-height:0}
+
+  /* 变更列表 */
+  .file-row{display:flex;align-items:center;gap:8px;height:27px;padding:0 14px;cursor:pointer;border-left:2px solid transparent}
+  .file-row:hover{background:#26282b}
+  .file-row.active{background:#2a2d33;border-left-color:var(--accent)}
+  .file-row .cb{width:13px;height:13px;flex:none;display:grid;place-items:center}
+  .file-row .cb input{appearance:none;width:12px;height:12px;border:1.4px solid #63676e;border-radius:3px;margin:0;cursor:pointer;background:transparent;position:relative}
+  .file-row .cb input:checked{background:var(--accent);border-color:var(--accent)}
+  .file-row .cb input:checked::after{content:"";position:absolute;left:3px;top:1px;width:3px;height:6px;border:solid #fff;border-width:0 1.5px 1.5px 0;transform:rotate(45deg)}
+  .fstat{width:14px;font-family:var(--mono);font-size:11px;font-weight:700;text-align:center;flex:none}
+  .fstat.M{color:var(--blue)}.fstat.A{color:var(--green)}.fstat.D{color:var(--red)}.fstat.U{color:var(--amber)}.fstat.R{color:var(--violet)}
+  .fname{font-size:12px;color:#cfd3d9;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .fdir{font-size:11px;color:#6f747c;margin-left:auto;white-space:nowrap;font-family:var(--mono)}
+  .file-row.active .fname{color:#fff}
+
+  .composer{border-top:1px solid var(--border);background:var(--panel-soft);padding:8px 14px 10px}
+  .composer textarea{width:100%;height:52px;resize:none;background:#26282b;border:1px solid var(--border);border-radius:5px;color:var(--text);padding:7px 9px;font-family:var(--ui);font-size:12px;outline:none}
+  .composer textarea:focus{border-color:#4a6ea8;box-shadow:0 0 0 2px rgba(53,116,240,.14)}
+  .composer textarea::placeholder{color:#6b7078}
+  .composer-actions{display:flex;align-items:center;gap:8px;margin-top:7px}
+  .checkline{display:flex;align-items:center;gap:5px;color:var(--text-sub);font-size:11.5px;cursor:pointer}
+  .checkline input{accent-color:var(--accent);width:12px;height:12px;margin:0}
+  .composer-actions .spacer{flex:1}
+  .ghost{height:26px;padding:0 10px;border:1px solid var(--border);border-radius:5px;color:var(--text-sub);font-size:12px}
+  .ghost:hover{background:var(--hover);color:var(--text)}
+  .split-btn{display:flex}
+  .split-btn .main-b{height:26px;padding:0 12px;border-radius:5px 0 0 5px;background:var(--accent);color:#fff;font-size:12px}
+  .split-btn .main-b:hover{background:var(--accent-hover)}
+  .split-btn .arrow-b{height:26px;width:24px;border-radius:0 5px 5px 0;background:var(--accent);color:#fff;border-left:1px solid rgba(0,0,0,.22);display:grid;place-items:center}
+  .split-btn .arrow-b:hover{background:var(--accent-hover)}
+
+  /* 提交记录 */
+  .log-filter{display:flex;align-items:center;gap:6px;padding:7px 14px;border-bottom:1px solid var(--border-soft);color:var(--text-dim);font-size:11.5px}
+  .log-filter .fchip{padding:2px 8px;border-radius:10px;border:1px solid var(--border);color:var(--text-sub)}
+  .log-filter .fchip.on{background:var(--accent-soft);border-color:#3d5f9e;color:#a8c5fa}
+  .log-filter .spacer{flex:1}
+  .commit-row{display:flex;align-items:center;gap:0;height:46px;padding-right:14px;cursor:pointer}
+  .commit-row:hover{background:#26282b}
+  .commit-row.active{background:#2a2d33}
+  .graph{width:62px;flex:none;align-self:stretch;position:relative}
+  .graph svg{display:block}
+  .commit-body{min-width:0;flex:1;padding:4px 0}
+  .commit-msg{font-size:12px;color:#d5d8dd;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .commit-sub{display:flex;align-items:center;gap:8px;font-size:11px;color:var(--text-dim);margin-top:1px}
+  .hash{font-family:var(--mono);font-size:10.5px;color:#8f959d;background:#2f3135;border-radius:3px;padding:0 4px}
+  .ref{font-size:10.5px;padding:0 5px;line-height:15px;border-radius:3px;background:rgba(91,171,99,.16);color:#8cc79a;font-family:var(--mono)}
+  .ref.tag{background:rgba(224,160,60,.15);color:#e0b166}
+  .ref.origin{background:rgba(77,143,240,.15);color:#9dbcf5}
+  .commit-author{margin-left:auto;flex:none;font-size:11px;color:var(--text-dim);padding-left:10px}
+
+  /* 控制台 */
+  .console{font-family:var(--mono);font-size:11.5px;line-height:1.85;padding:10px 14px}
+  .console .line{display:flex;gap:10px;white-space:pre}
+  .console .t{color:#6f747c;flex:none}
+  .console .ok{color:#8cc79a}.console .warn{color:#e0b166}.console .info{color:#9dbcf5}.console .err{color:#f2a1a1}
+
+  /* 右侧检查器 */
+  .inspector{background:var(--panel);border-left:1px solid var(--border);display:flex;flex-direction:column;min-height:0}
+  .insp-head{height:36px;display:flex;align-items:center;gap:6px;padding:0 12px;border-bottom:1px solid var(--border-soft);font-size:12px;font-weight:600}
+  .insp-head .spacer{flex:1}
+  .insp-sub{display:flex;align-items:center;gap:6px;padding:7px 12px;font-family:var(--mono);font-size:11px;color:var(--text-sub);border-bottom:1px solid var(--border-soft);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .diff{flex:1;overflow:auto;font-family:var(--mono);font-size:11.5px;line-height:1.7;background:#1e1f22}
+  .dline{display:flex;white-space:pre}
+  .dline .ln{width:34px;flex:none;text-align:right;padding-right:9px;color:#5c6169;user-select:none}
+  .dline .txt{padding-right:12px;white-space:pre}
+  .dline.add{background:rgba(91,171,99,.13)}.dline.add .txt{color:#a5d6ae}
+  .dline.del{background:rgba(219,92,92,.12)}.dline.del .txt{color:#ecb0b0}
+  .dline.hunk{background:rgba(77,143,240,.10)}.dline.hunk .txt{color:#9dbcf5}
+  .dline.conflict{background:rgba(224,160,60,.12)}.dline.conflict .txt{color:#e8c690}
+  .insp-foot{border-top:1px solid var(--border-soft);padding:8px 12px;display:flex;gap:8px}
+  .insp-foot .ghost{flex:1;display:flex;align-items:center;justify-content:center;gap:5px}
+
+  /* 状态栏 */
+  .statusbar{height:26px;display:flex;align-items:center;gap:14px;padding:0 12px;background:var(--panel-soft);border-top:1px solid var(--border);font-size:11px;color:var(--text-dim)}
+  .statusbar .spacer{flex:1}
+  .statusbar .op{color:#9dbcf5;font-family:var(--mono)}
+  .statusbar .item{display:flex;align-items:center;gap:5px}
+  .statusbar .item:hover{color:var(--text);cursor:default}
+  .progress{width:120px;height:3px;background:#35373b;border-radius:2px;overflow:hidden;display:none}
+  .progress.show{display:block}
+  .progress i{display:block;height:100%;width:0;background:var(--accent);transition:width .4s ease}
+  ::-webkit-scrollbar{width:10px;height:10px}
+  ::-webkit-scrollbar-thumb{background:#3f4247;border-radius:5px;border:2px solid transparent;background-clip:content-box}
+  ::-webkit-scrollbar-thumb:hover{background:#4c5056;background-clip:content-box}
+  ::-webkit-scrollbar-track{background:transparent}
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="titlebar">
+    <div class="traffic"><i></i><i></i><i></i></div>
+    <div class="brand">
+      <span class="logo" id="brandLogo"></span>
+      git-batch <small>· 批量 Git 工作台</small>
+    </div>
+    <div class="title-tabs"><span class="on">工作区</span><span>历史任务</span></div>
+    <span class="spacer"></span>
+    <div class="win-actions" id="winActions"></div>
+  </header>
+
+  <div class="main">
+    <!-- 左侧仓库列表 -->
+    <aside class="sidebar">
+      <div class="side-head">
+        <span>仓库</span><span class="pill" id="repoTotal">8</span>
+        <span class="spacer"></span>
+        <button class="mini" id="sideRefresh" title="扫描工作区"></button>
+        <button class="mini" id="sideMore" title="更多操作"></button>
+      </div>
+      <div class="side-search">
+        <span id="searchIcon"></span>
+        <input id="repoFilter" placeholder="筛选仓库 / 路径" autocomplete="off" />
+      </div>
+      <div class="side-sub"><span>工作区 · rusthing</span><span id="selCount">已选 2</span></div>
+      <div class="repo-list" id="repoList"></div>
+      <div class="side-foot">
+        <button id="selectAll">全选</button>
+        <button id="selectDirty">仅选有变更</button>
+      </div>
+    </aside>
+
+    <!-- 中间工作区 -->
+    <section class="work">
+      <div class="toolbar">
+        <button class="tbtn" data-op="fetch" title="对选中仓库执行 Fetch"><span data-icon="refresh-cw"></span>Fetch</button>
+        <button class="tbtn" data-op="pull" title="对选中仓库执行 Pull"><span data-icon="arrow-down-to-line"></span>Pull<span class="num" id="behindNum">8</span></button>
+        <button class="tbtn" data-op="push" title="对选中仓库执行 Push"><span data-icon="arrow-up-from-line"></span>Push<span class="num" id="aheadNum">5</span></button>
+        <span class="tb-sep"></span>
+        <button class="branch-pill" id="branchPill"><span data-icon="git-branch"></span><span id="branchName">main</span><span data-icon="chevron-down"></span></button>
+        <span class="spacer"></span>
+        <button class="tbtn" title="搜索提交"><span data-icon="search"></span></button>
+        <button class="tbtn" title="视图设置"><span data-icon="settings"></span></button>
+        <button class="tbtn" title="更多"><span data-icon="more-horizontal"></span></button>
+        <button class="primary" id="batchCommit"><span data-icon="check"></span>批量提交</button>
+      </div>
+
+      <div class="repo-head">
+        <div class="repo-title">
+          <span class="repo-name" id="repoName">adm-rs</span>
+          <span class="repo-path" id="repoPath">~/workspace/rusthing/adm-rs</span>
+        </div>
+        <div class="repo-meta" id="repoMeta"></div>
+      </div>
+
+      <div class="batch-banner" id="batchBanner">
+        <span data-icon="layers"></span>
+        <span>工具栏操作将作用于 <b id="bannerCount">2</b> 个选中仓库</span>
+        <button class="clear" id="clearSel">清除选择</button>
+      </div>
+
+      <div class="tabs" id="tabs">
+        <button class="tab active" data-tab="changes">变更 <span class="count" id="changesCount">12</span></button>
+        <button class="tab" data-tab="log">提交记录 <span class="count" id="logCount">7</span></button>
+        <button class="tab" data-tab="console">控制台 <span class="count">4</span></button>
+        <span class="spacer"></span>
+        <button class="tool" title="折叠全部"><span data-icon="chevron-down"></span></button>
+        <button class="tool" title="刷新"><span data-icon="refresh-cw"></span></button>
+      </div>
+
+      <div class="pane-wrap">
+        <!-- 变更 -->
+        <div class="pane active" id="pane-changes">
+          <div class="scroll">
+            <div class="file-row" style="height:22px;color:#7f858e;font-size:11px;cursor:default">
+              <span class="cb"></span>
+              <span style="margin-left:3px">已修改 6 · 新增 1 · 删除 1 · 冲突 1</span>
+              <span class="fdir">按目录分组</span>
+            </div>
+            <div id="fileList"></div>
+          </div>
+          <div class="composer">
+            <textarea id="commitMsg" placeholder="提交信息（Ctrl+Enter 提交，作用于 2 个选中仓库）"></textarea>
+            <div class="composer-actions">
+              <label class="checkline"><input type="checkbox" /> Amend</label>
+              <label class="checkline"><input type="checkbox" /> 提交前自动 Stash</label>
+              <span class="spacer"></span>
+              <button class="ghost" id="commitAndPush">提交并推送</button>
+              <div class="split-btn">
+                <button class="main-b" id="commitBtn">提交</button>
+                <button class="arrow-b" id="commitMore"><span data-icon="chevron-down"></span></button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 提交记录 -->
+        <div class="pane" id="pane-log">
+          <div class="log-filter">
+            <span class="fchip on">当前分支</span>
+            <span class="fchip">所有分支</span>
+            <span class="fchip">我的提交</span>
+            <span class="spacer"></span>
+            <span>7 条提交 · 与 origin/main 同步 0/3</span>
+          </div>
+          <div class="scroll"><div id="commitList"></div></div>
+        </div>
+
+        <!-- 控制台 -->
+        <div class="pane" id="pane-console">
+          <div class="scroll"><div class="console" id="consoleOut"></div></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 右侧检查器 -->
+    <aside class="inspector">
+      <div class="insp-head">
+        <span id="inspTitleIcon"></span>
+        <span id="inspTitle">文件差异</span>
+        <span class="spacer"></span>
+        <button class="mini" title="在编辑器中打开" id="openFile"></button>
+        <button class="mini" title="更多" id="fileMore"></button>
+      </div>
+      <div class="insp-sub" id="inspSub">src/domain/org/member.rs</div>
+      <div class="diff" id="diffView"></div>
+      <div class="insp-foot">
+        <button class="ghost" id="stageBtn">暂存文件</button>
+        <button class="ghost" id="revertBtn">回滚</button>
+      </div>
+    </aside>
+  </div>
+
+  <footer class="statusbar">
+    <span class="item" id="statusBranch"><span data-icon="git-branch"></span> main</span>
+    <span class="item">8 个仓库 · 工作区 rusthing</span>
+    <span class="op" id="statusText">就绪</span>
+    <span class="progress" id="progress"><i id="progressBar"></i></span>
+    <span class="spacer"></span>
+    <span class="item" id="statusSel">已选 2 个仓库</span>
+    <span class="item" id="statusSync">↑2 ↓3</span>
+  </footer>
+</div>
+
+<script src="assets/ui.js"></script>
+<script>
+(function () {
+  var state = {
+    active: 'adm-rs',
+    selected: ['adm-rs', 'dtw-rs'],
+    tab: 'changes',
+    file: 'f1',
+    logIndex: 0,
+    filter: ''
+  };
+  var $ = function (id) { return document.getElementById(id); };
+
+  // 静态图标注入
+  document.querySelectorAll('[data-icon]').forEach(function (el) {
+    el.innerHTML = icon(el.getAttribute('data-icon'), 14);
+  });
+  $('brandLogo').innerHTML = icon('git-branch', 13);
+  $('winActions').innerHTML = icon('minus', 14) + icon('square', 13) + icon('x', 14);
+  $('sideRefresh').innerHTML = icon('refresh-cw', 13);
+  $('sideMore').innerHTML = icon('more-horizontal', 14);
+  $('searchIcon').innerHTML = icon('search', 13);
+  $('inspTitleIcon').innerHTML = icon('file-diff', 14);
+  $('openFile').innerHTML = icon('external-link', 13);
+  $('fileMore').innerHTML = icon('more-horizontal', 14);
+
+  function renderRepoList() {
+    var list = $('repoList');
+    var kw = state.filter.trim().toLowerCase();
+    list.innerHTML = MOCK.repos.filter(function (r) {
+      return !kw || r.name.toLowerCase().indexOf(kw) >= 0 || r.path.toLowerCase().indexOf(kw) >= 0;
+    }).map(function (r) {
+      var checked = state.selected.indexOf(r.id) >= 0;
+      var active = r.id === state.active;
+      var dotClass = r.paused ? 'state-paused' : 'state-' + r.state;
+      return '<div class="repo-row ' + (active ? 'active' : '') + '" data-id="' + r.id + '">' +
+        '<label class="cb" title="加入批量选择"><input type="checkbox" data-check="' + r.id + '" ' + (checked ? 'checked' : '') + '></label>' +
+        '<span class="state-dot ' + dotClass + '"></span>' +
+        '<span class="repo-icon">' + icon('folder', 14) + '</span>' +
+        '<div class="repo-main">' +
+          '<div class="repo-line"><span class="rname">' + r.name + '</span>' +
+            (r.changes > 0 ? '<span class="chg">' + r.changes + '</span>' : '') + '</div>' +
+          '<div class="repo-sub">' + icon('git-branch', 11) + '<span>' + r.branch + '</span>' +
+            (r.behind ? '<span>· ' + r.behind + '↓</span>' : '') +
+            (r.ahead ? '<span>· ' + r.ahead + '↑</span>' : '') +
+          '</div>' +
+        '</div>' +
+      '</div>';
+    }).join('');
+
+    list.querySelectorAll('.repo-row').forEach(function (row) {
+      row.addEventListener('click', function (e) {
+        if (e.target.closest('.cb')) return;
+        state.active = row.getAttribute('data-id');
+        renderAll();
+      });
+    });
+    list.querySelectorAll('input[data-check]').forEach(function (cb) {
+      cb.addEventListener('change', function () {
+        var id = cb.getAttribute('data-check');
+        var idx = state.selected.indexOf(id);
+        if (cb.checked && idx < 0) state.selected.push(id);
+        if (!cb.checked && idx >= 0) state.selected.splice(idx, 1);
+        updateSelectionUI();
+      });
+    });
+  }
+
+  function updateSelectionUI() {
+    var n = state.selected.length;
+    $('selCount').textContent = '已选 ' + n;
+    $('statusSel').textContent = '已选 ' + n + ' 个仓库';
+    $('bannerCount').textContent = n;
+    $('batchBanner').classList.toggle('show', n > 1);
+    $('commitMsg').placeholder = '提交信息（Ctrl+Enter 提交，作用于 ' + (n || 1) + ' 个仓库）';
+    var dirty = MOCK.repos.filter(function (r) { return state.selected.indexOf(r.id) >= 0; });
+    $('aheadNum').textContent = dirty.reduce(function (s, r) { return s + r.ahead; }, 0);
+    $('behindNum').textContent = dirty.reduce(function (s, r) { return s + r.behind; }, 0);
+  }
+
+  function renderHeader() {
+    var r = repoById(state.active);
+    $('repoName').textContent = r.name;
+    $('repoPath').textContent = r.path;
+    $('branchName').textContent = r.branch;
+    $('statusBranch').innerHTML = icon('git-branch', 12) + ' ' + r.branch;
+    $('changesCount').textContent = r.changes;
+    var meta = '';
+    if (r.ahead) meta += '<span class="chip up">' + icon('arrow-up-from-line', 11) + r.ahead + ' 待推送</span>';
+    if (r.behind) meta += '<span class="chip down">' + icon('arrow-down-to-line', 11) + r.behind + ' 待拉取</span>';
+    if (r.state === 'conflict') meta += '<span class="chip danger">' + icon('alert-triangle', 11) + '1 冲突</span>';
+    if (r.state === 'clean') meta += '<span class="chip">' + icon('check', 11) + '工作区干净</span>';
+    if (r.paused) meta += '<span class="chip">' + icon('pause', 11) + '已暂停</span>';
+    $('repoMeta').innerHTML = meta;
+    $('statusSync').textContent = '↑' + r.ahead + ' ↓' + r.behind;
+  }
+
+  function renderFiles() {
+    var list = $('fileList');
+    list.innerHTML = MOCK.files.map(function (f) {
+      return '<div class="file-row ' + (f.id === state.file ? 'active' : '') + '" data-file="' + f.id + '">' +
+        '<label class="cb"><input type="checkbox" ' + (f.id === state.file || f.status !== 'U' ? 'checked' : '') + '></label>' +
+        '<span class="fstat ' + f.status + '">' + f.status + '</span>' +
+        '<span class="fname">' + f.path.split('/').pop() + '</span>' +
+        '<span class="fdir">' + (f.dir === '.' ? '' : f.dir) + '</span>' +
+      '</div>';
+    }).join('');
+    list.querySelectorAll('.file-row').forEach(function (row) {
+      row.addEventListener('click', function (e) {
+        if (e.target.closest('.cb')) return;
+        state.file = row.getAttribute('data-file');
+        renderFiles();
+        renderDiff();
+      });
+    });
+  }
+
+  function renderDiff() {
+    var f = MOCK.files.filter(function (x) { return x.id === state.file; })[0] || MOCK.files[0];
+    $('inspSub').textContent = f.status + '  ' + f.path;
+    var rows = f.diff.split('\n');
+    var html = rows.map(function (line, i) {
+      var cls = '';
+      if (line.indexOf('@@') === 0) cls = 'hunk';
+      else if (line.charAt(0) === '+') cls = 'add';
+      else if (line.charAt(0) === '-') cls = 'del';
+      else if (/^(<<<<<<<|=======|>>>>>>>)/.test(line)) cls = 'conflict';
+      return '<div class="dline ' + cls + '"><span class="ln">' + (i + 1) + '</span><span class="txt">' + esc(line || ' ') + '</span></div>';
+    }).join('');
+    $('diffView').innerHTML = html;
+  }
+
+  function renderCommits() {
+    $('commitList').innerHTML = MOCK.commits.map(function (c, i) {
+      var lane = c.lane === 1;
+      var x = lane ? 38 : 22;
+      var color = lane ? '#a571d7' : '#4d8ff0';
+      var svg = '<svg width="62" height="46" viewBox="0 0 62 46">' +
+        '<line x1="22" y1="0" x2="22" y2="46" stroke="#3d4045" stroke-width="1.5"/>' +
+        (lane ? '<path d="M38 0 C38 20 22 20 22 23" stroke="#5a4a70" stroke-width="1.5" fill="none"/>' : '') +
+        '<circle cx="' + (lane ? 38 : 22) + '" cy="23" r="3.6" fill="#1e1f22" stroke="' + color + '" stroke-width="2"/>' +
+        (c.merge ? '<circle cx="38" cy="23" r="2.4" fill="#a571d7"/>' : '') +
+      '</svg>';
+      var refs = c.refs.map(function (ref) {
+        var cls = ref.indexOf('tag:') === 0 ? 'tag' : (ref.indexOf('origin') === 0 ? 'origin' : '');
+        return '<span class="ref ' + cls + '">' + ref + '</span>';
+      }).join('');
+      return '<div class="commit-row ' + (i === state.logIndex ? 'active' : '') + '" data-idx="' + i + '">' +
+        '<span class="graph">' + svg + '</span>' +
+        '<div class="commit-body">' +
+          '<div class="commit-msg">' + c.msg + ' ' + refs + '</div>' +
+          '<div class="commit-sub"><span class="hash">' + c.hash + '</span><span>' + c.author + '</span><span>·</span><span>' + c.time + '</span><span>·</span><span>' + c.files + ' 个文件</span></div>' +
+        '</div>' +
+        '<span class="commit-author">' + (i === 0 ? '当前 HEAD' : '') + '</span>' +
+      '</div>';
+    }).join('');
+
+    $('commitList').querySelectorAll('.commit-row').forEach(function (row) {
+      row.addEventListener('click', function () {
+        state.logIndex = Number(row.getAttribute('data-idx'));
+        renderCommits();
+        renderCommitDetail(state.logIndex);
+      });
+    });
+  }
+
+  function renderCommitDetail(idx) {
+    var c = MOCK.commits[idx];
+    $('inspTitle').textContent = '提交详情';
+    $('inspSub').textContent = c.hash + ' · ' + c.author + ' · ' + c.time;
+    var list = MOCK.files.slice(0, c.files > MOCK.files.length ? MOCK.files.length : c.files);
+    $('diffView').innerHTML =
+      '<div style="padding:10px 12px;border-bottom:1px solid #303236">' +
+        '<div style="font-size:12.5px;color:#e2e4e8;line-height:1.5">' + c.msg + '</div>' +
+        '<div style="display:flex;gap:6px;margin-top:7px;flex-wrap:wrap">' + c.refs.map(function (r) { return '<span class="ref">' + r + '</span>'; }).join('') + '</div>' +
+      '</div>' +
+      list.map(function (f) {
+        return '<div class="file-row" style="padding-left:12px"><span class="fstat ' + f.status + '">' + f.status + '</span><span class="fname">' + f.path + '</span></div>';
+      }).join('');
+  }
+
+  function renderConsole() {
+    $('consoleOut').innerHTML = MOCK.console.map(function (l) {
+      return '<div class="line"><span class="t">[' + l.t + ']</span><span class="' + l.lvl + '">' + esc(l.msg) + '</span></div>';
+    }).join('');
+  }
+
+  function pushConsole(lvl, msg) {
+    var d = new Date();
+    var t = ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2) + ':' + ('0' + d.getSeconds()).slice(-2);
+    MOCK.console.push({ t: t, lvl: lvl, msg: msg });
+    renderConsole();
+  }
+
+  function setTab(tab) {
+    state.tab = tab;
+    document.querySelectorAll('.tab').forEach(function (t) {
+      t.classList.toggle('active', t.getAttribute('data-tab') === tab);
+    });
+    ['changes', 'log', 'console'].forEach(function (k) {
+      $('pane-' + k).classList.toggle('active', k === tab);
+    });
+    if (tab !== 'log') {
+      $('inspTitle').textContent = '文件差异';
+      renderDiff();
+    }
+  }
+
+  function selectedRepos() {
+    var ids = state.selected.length ? state.selected : [state.active];
+    return ids.map(repoById);
+  }
+  function selectedNames() {
+    var names = selectedRepos().map(function (r) { return r.name; });
+    return names.length > 3 ? names.slice(0, 3).join('、') + ' 等 ' + names.length + ' 个' : names.join('、');
+  }
+
+  function runOp(op) {
+    var names = selectedRepos().map(function (r) { return r.name; });
+    var label = { fetch: 'Fetch', pull: 'Pull', push: 'Push' }[op];
+    $('statusText').textContent = label + ' · ' + names.length + ' 个仓库';
+    $('progress').classList.add('show');
+    $('progressBar').style.width = '8%';
+    pushConsole('info', '[' + label + '] 开始执行：' + names.join(', '));
+    setTimeout(function () { $('progressBar').style.width = '58%'; }, 220);
+    setTimeout(function () {
+      $('progressBar').style.width = '100%';
+      $('statusText').textContent = label + ' 完成 · ' + names.length + ' 个仓库';
+      pushConsole('ok', '[' + label + '] 完成 ' + names.length + ' 个仓库，耗时 1.8s');
+      toast(label + ' 完成：' + selectedNames());
+      setTimeout(function () {
+        $('progress').classList.remove('show');
+        $('progressBar').style.width = '0';
+      }, 700);
+    }, 1100);
+  }
+
+  function renderAll() {
+    renderRepoList();
+    renderHeader();
+    renderFiles();
+    renderDiff();
+    renderCommits();
+    renderConsole();
+    updateSelectionUI();
+  }
+
+  // 事件绑定
+  document.querySelectorAll('.toolbar .tbtn[data-op]').forEach(function (btn) {
+    btn.addEventListener('click', function () { runOp(btn.getAttribute('data-op')); });
+  });
+  document.querySelectorAll('.tab').forEach(function (t) {
+    t.addEventListener('click', function () { setTab(t.getAttribute('data-tab')); });
+  });
+  $('repoFilter').addEventListener('input', function (e) {
+    state.filter = e.target.value;
+    renderRepoList();
+  });
+  $('selectAll').addEventListener('click', function () {
+    state.selected = MOCK.repos.map(function (r) { return r.id; });
+    renderRepoList();
+    updateSelectionUI();
+  });
+  $('selectDirty').addEventListener('click', function () {
+    state.selected = MOCK.repos.filter(function (r) { return r.changes > 0; }).map(function (r) { return r.id; });
+    renderRepoList();
+    updateSelectionUI();
+  });
+  $('clearSel').addEventListener('click', function () {
+    state.selected = [];
+    renderRepoList();
+    updateSelectionUI();
+  });
+  $('batchCommit').addEventListener('click', function () {
+    var msg = $('commitMsg').value.trim() || 'chore: 批量提交';
+    toast('已在 ' + selectedRepos().length + ' 个仓库创建提交');
+    pushConsole('ok', '[commit] ' + msg + ' → ' + selectedRepos().map(function (r) { return r.name; }).join(', '));
+  });
+  $('commitBtn').addEventListener('click', function () {
+    var msg = $('commitMsg').value.trim() || 'chore: 同步本地改动';
+    toast('提交完成：' + selectedNames());
+    pushConsole('ok', '[commit] ' + msg + ' → ' + selectedRepos().map(function (r) { return r.name; }).join(', '));
+  });
+  $('commitAndPush').addEventListener('click', function () {
+    toast('已提交并推送 ' + selectedRepos().length + ' 个仓库');
+    pushConsole('ok', '[commit+push] ' + selectedRepos().map(function (r) { return r.name; }).join(', ') + ' 完成');
+  });
+  $('commitMore').addEventListener('click', function () { toast('更多提交选项：Amend / 签名 / 提交并创建 MR', 'warn'); });
+  $('stageBtn').addEventListener('click', function () { toast('已暂存 ' + MOCK.files.filter(function (f) { return f.id === state.file; })[0].path); });
+  $('revertBtn').addEventListener('click', function () { toast('已回滚当前文件改动', 'warn'); });
+  $('sideRefresh').addEventListener('click', function () { toast('已重新扫描工作区，共 8 个仓库'); });
+  $('sideMore').addEventListener('click', function () { toast('仓库设置：忽略目录 / 定时同步', 'warn'); });
+  $('openFile').addEventListener('click', function () { toast('将在系统编辑器中打开文件', 'warn'); });
+  $('fileMore').addEventListener('click', function () { toast('更多：在历史中查看 / 复制路径', 'warn'); });
+  $('branchPill').addEventListener('click', function () { toast('分支切换：当前 ' + repoById(state.active).branch, 'warn'); });
+  $('commitMsg').addEventListener('keydown', function (e) {
+    if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') { $('commitBtn').click(); }
+  });
+
+  renderAll();
+})();
+</script>
+</body>
+</html>

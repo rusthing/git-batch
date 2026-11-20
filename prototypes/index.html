@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>git-batch · UI 原型评审</title>
+<style>
+  :root{
+    --bg:#0d0f12; --panel:#14171b; --panel-2:#191d22; --border:#262b32; --border-soft:#1e2329;
+    --text:#e9eaec; --text-sub:#a2a9b3; --text-dim:#6e7783;
+    --a:#4d8ff0; --b:#3fb9a5; --c:#e8a13c;
+    --ui:-apple-system,"SF Pro Text","Segoe UI","PingFang SC","Hiragino Sans GB",sans-serif;
+    --serif:"Songti SC","STSong","Iowan Old Style",Georgia,serif;
+    --mono:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;min-height:100%}
+  body{background:var(--bg);color:var(--text);font:14px/1.55 var(--ui);-webkit-font-smoothing:antialiased;overflow-x:hidden}
+  a{color:inherit;text-decoration:none}
+  .ico{vertical-align:-2px}
+  .bg-grid{position:fixed;inset:0;pointer-events:none;z-index:0;
+    background-image:linear-gradient(rgba(255,255,255,.028) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.028) 1px,transparent 1px);
+    background-size:64px 64px;mask-image:radial-gradient(ellipse 80% 60% at 50% 0%,#000 20%,transparent 75%)}
+  .bg-glow{position:fixed;inset:-20% -10% auto -10%;height:600px;pointer-events:none;z-index:0;
+    background:radial-gradient(420px 220px at 22% 18%,rgba(77,143,240,.10),transparent 70%),
+               radial-gradient(420px 220px at 52% 8%,rgba(63,185,165,.08),transparent 70%),
+               radial-gradient(420px 220px at 82% 18%,rgba(232,161,60,.09),transparent 70%)}
+  .wrap{position:relative;z-index:1;max-width:1400px;margin:0 auto;padding:34px 36px 56px}
+
+  /* 头部 */
+  .eyebrow{display:flex;align-items:center;gap:10px;font-family:var(--mono);font-size:11px;letter-spacing:.14em;color:var(--text-dim);text-transform:uppercase}
+  .eyebrow .mark{width:22px;height:22px;border-radius:6px;background:linear-gradient(150deg,#2f5fd0,#173a82);display:grid;place-items:center;color:#fff;font-size:10px;font-weight:700;letter-spacing:0}
+  .eyebrow .sep{width:3px;height:3px;border-radius:50%;background:#4a525d}
+  h1{font-family:var(--serif);font-weight:600;font-size:clamp(30px,4.2vw,52px);line-height:1.12;letter-spacing:-.01em;margin:22px 0 12px;max-width:900px}
+  h1 em{font-style:normal;color:#c9a86c}
+  .lede{max-width:660px;color:var(--text-sub);font-size:14.5px;line-height:1.75;margin:0}
+  .meta{display:flex;flex-wrap:wrap;gap:8px;margin-top:22px}
+  .meta span{display:inline-flex;align-items:center;gap:7px;height:26px;padding:0 10px;border:1px solid var(--border);border-radius:20px;background:rgba(20,23,27,.7);color:var(--text-sub);font-size:11.5px}
+  .meta span i{width:5px;height:5px;border-radius:50%;background:var(--text-dim)}
+  .meta span.hot i{background:var(--c)}
+
+  .divider{height:1px;background:linear-gradient(90deg,transparent,var(--border),transparent);margin:34px 0 26px}
+
+  /* 方案卡片 */
+  .cards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:20px}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:12px;overflow:hidden;display:flex;flex-direction:column;
+    opacity:0;transform:translateY(14px);animation:rise .7s cubic-bezier(.2,.7,.3,1) forwards;transition:border-color .2s,transform .25s,box-shadow .25s}
+  .card:nth-child(1){animation-delay:.05s}
+  .card:nth-child(2){animation-delay:.14s}
+  .card:nth-child(3){animation-delay:.23s}
+  .card:hover{border-color:#3a424d;transform:translateY(-3px);box-shadow:0 22px 50px rgba(0,0,0,.45)}
+  @keyframes rise{to{opacity:1;transform:none}}
+  .shot{position:relative;background:#0b0d10;border-bottom:1px solid var(--border);overflow:hidden}
+  .shot .frame{position:absolute;inset:0;pointer-events:none}
+  .shot iframe{width:1280px;height:800px;border:0;transform-origin:top left;pointer-events:none;background:#111}
+  .shot .open{position:absolute;inset:0;display:flex;align-items:flex-end;justify-content:flex-end;padding:10px;background:linear-gradient(180deg,transparent 55%,rgba(8,10,12,.5));opacity:0;transition:.2s;z-index:2}
+  .card:hover .shot .open{opacity:1}
+  .shot .open a{display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 11px;border-radius:6px;background:#fff;color:#111;font-size:11.5px;font-weight:600}
+  .card-body{padding:15px 16px 16px;display:flex;flex-direction:column;flex:1}
+  .tag{display:flex;align-items:center;gap:8px;font-family:var(--mono);font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--text-dim)}
+  .tag .badge{width:20px;height:20px;border-radius:5px;display:grid;place-items:center;color:#0b0d10;font-weight:700;font-size:10.5px}
+  .card h2{font-size:17px;font-weight:600;margin:9px 0 5px;letter-spacing:.1px}
+  .card p{margin:0;color:var(--text-sub);font-size:12.5px;line-height:1.7;min-height:64px}
+  .traits{display:flex;flex-wrap:wrap;gap:6px;margin-top:13px}
+  .traits span{font-size:10.5px;color:#9ba3ad;border:1px solid var(--border);border-radius:4px;padding:2px 6px;background:var(--panel-2)}
+  .card-foot{margin-top:14px;padding-top:12px;border-top:1px solid var(--border-soft);display:flex;align-items:center;gap:8px}
+  .card-foot .best{font-size:11px;color:var(--text-dim)}
+  .card-foot .go{margin-left:auto;display:inline-flex;align-items:center;gap:5px;font-size:12px;color:var(--text);font-weight:500}
+  .card-foot .go:hover{color:#fff;text-decoration:underline;text-underline-offset:3px}
+  .card.a .tag .badge{background:var(--a)}.card.a .go{color:#9dbcfa}
+  .card.b .tag .badge{background:var(--b)}.card.b .go{color:#8fd9cc}
+  .card.c .tag .badge{background:var(--c)}.card.c .go{color:#edc07a}
+
+  /* 对比表 */
+  .compare{margin-top:44px}
+  .cmp-head{display:flex;align-items:baseline;gap:14px;margin-bottom:14px}
+  .cmp-head h3{font-family:var(--serif);font-size:23px;font-weight:600;margin:0}
+  .cmp-head span{font-size:11.5px;color:var(--text-dim)}
+  table{width:100%;border-collapse:collapse;border:1px solid var(--border);border-radius:10px;overflow:hidden;background:rgba(20,23,27,.62)}
+  th,td{padding:12px 16px;text-align:left;font-size:12.5px;border-bottom:1px solid var(--border-soft);vertical-align:top}
+  thead th{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--text-dim);font-weight:600;background:#111418}
+  thead th:nth-child(2){color:var(--a)}thead th:nth-child(3){color:var(--b)}thead th:nth-child(4){color:var(--c)}
+  tbody tr:last-child td{border-bottom:0}
+  tbody td:first-child{color:var(--text-sub);width:170px;font-size:12px}
+  tbody tr:hover{background:rgba(255,255,255,.018)}
+  td .hl{color:var(--text)}
+  .note{margin-top:22px;padding:14px 16px;border:1px solid var(--border);border-left:2px solid var(--c);border-radius:0 8px 8px 0;background:linear-gradient(90deg,rgba(232,161,60,.06),transparent);color:var(--text-sub);font-size:12.5px;line-height:1.7}
+  .note b{color:var(--text);font-weight:600}
+  footer{margin-top:36px;display:flex;align-items:center;gap:10px;color:var(--text-dim);font-size:11.5px;font-family:var(--mono)}
+
+  @media (max-width:1080px){.cards{grid-template-columns:1fr}.shot{aspect-ratio:16/10}.card p{min-height:0}}
+</style>
+</head>
+<body>
+<div class="bg-grid"></div>
+<div class="bg-glow"></div>
+
+<div class="wrap">
+  <div class="eyebrow">
+    <span class="mark">gb</span>
+    <span>git-batch</span><span class="sep"></span>
+    <span>UI 原型评审 · v0.1</span>
+  </div>
+
+  <h1>三种批量 Git 管理界面,<br />选一个作为 <em>git-batch</em> 的起点</h1>
+  <p class="lede">目标是用 Rust + Tauri 2 做一个跨平台的专用 Git 批量管理工具,交互参考 IntelliJ IDEA 的 Git 工具窗口,但把"一次操作多个仓库"作为一等能力。下面三款原型使用同一组 mock 数据,可直接点开体验。</p>
+
+  <div class="meta">
+    <span><i></i>Tauri 2 + React + Vite</span>
+    <span><i></i>macOS / Windows / Linux</span>
+    <span><i></i>8 个仓库 · 含冲突 / 落后 / 暂停场景</span>
+    <span class="hot"><i></i>三款均为静态可交互原型</span>
+  </div>
+
+  <div class="divider"></div>
+
+  <div class="cards">
+    <article class="card a">
+      <div class="shot" data-preview="prototype-a.html">
+        <div class="frame"><iframe src="prototype-a.html" title="方案 A 预览" loading="lazy"></iframe></div>
+        <div class="open"><a href="prototype-a.html" target="_blank">打开原型 ↗</a></div>
+      </div>
+      <div class="card-body">
+        <div class="tag"><span class="badge">A</span>IDEA 工作台</div>
+        <h2>沿用 IntelliJ 的肌肉记忆</h2>
+        <p>左侧仓库树 + 中间变更/提交记录 + 右侧 diff,顶部工具栏直接作用于勾选的仓库。最接近日常在 IDEA 里管理单个仓库的体验,迁移成本最低。</p>
+        <div class="traits"><span>三栏布局</span><span>提交图</span><span>文件级暂存</span><span>批量作用于选中项</span></div>
+        <div class="card-foot"><span class="best">适合:从 IDEA 迁移的用户</span><a class="go" href="prototype-a.html" target="_blank">体验 →</a></div>
+      </div>
+    </article>
+
+    <article class="card b">
+      <div class="shot" data-preview="prototype-b.html">
+        <div class="frame"><iframe src="prototype-b.html" title="方案 B 预览" loading="lazy"></iframe></div>
+        <div class="open"><a href="prototype-b.html" target="_blank">打开原型 ↗</a></div>
+      </div>
+      <div class="card-body">
+        <div class="tag"><span class="badge">B</span>仓库矩阵</div>
+        <h2>把所有仓库摊平成一张表</h2>
+        <p>表格式总览,分支、变更数、领先/落后、最近提交同屏对比;勾选后底部浮出批量操作条,右侧抽屉看单个仓库详情。信息密度最高,批量路径最短。</p>
+        <div class="traits"><span>表格总览</span><span>多选批量条</span><span>详情抽屉</span><span>任务日志坞</span></div>
+        <div class="card-foot"><span class="best">适合:20+ 仓库的工作区</span><a class="go" href="prototype-b.html" target="_blank">体验 →</a></div>
+      </div>
+    </article>
+
+    <article class="card c">
+      <div class="shot" data-preview="prototype-c.html">
+        <div class="frame"><iframe src="prototype-c.html" title="方案 C 预览" loading="lazy"></iframe></div>
+        <div class="open"><a href="prototype-c.html" target="_blank">打开原型 ↗</a></div>
+      </div>
+      <div class="card-body">
+        <div class="tag"><span class="badge">C</span>执行计划</div>
+        <h2>先预览风险,再生成执行队列</h2>
+        <p>把批量操作拆成"选仓库 → 选操作 → 看风险预览 → 生成队列",执行时逐仓库展示进度,可暂停、取消、重试失败项。最稳妥,也最像一次正式发布操作。</p>
+        <div class="traits"><span>风险预览</span><span>执行队列</span><span>暂停 / 重试</span><span>仅快进合并</span></div>
+        <div class="card-foot"><span class="best">适合:多人协作 / 谨慎批处理</span><a class="go" href="prototype-c.html" target="_blank">体验 →</a></div>
+      </div>
+    </article>
+  </div>
+
+  <section class="compare">
+    <div class="cmp-head">
+      <h3>取舍对比</h3>
+      <span>没有绝对优劣,取决于你更看重"顺手"还是"可控"</span>
+    </div>
+    <table>
+      <thead>
+        <tr><th>维度</th><th>A · IDEA 工作台</th><th>B · 仓库矩阵</th><th>C · 执行计划</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>布局模型</td><td class="hl">仓库树 + 变更/日志 + diff 三栏</td><td class="hl">单张聚合表格 + 详情抽屉</td><td class="hl">仓库清单 + 操作编排 + 执行队列</td></tr>
+        <tr><td>批量操作路径</td><td>勾选仓库后点顶部工具栏,约 2 步</td><td class="hl">勾选后底部批量条,约 1 步</td><td>选仓库 → 选操作 → 确认计划,约 3 步但每步可核对</td></tr>
+        <tr><td>信息密度</td><td>中:单仓库信息深,全局对比弱</td><td class="hl">高:8 个仓库状态一屏看完</td><td>中:聚焦"本次要执行什么"</td></tr>
+        <tr><td>风险控制</td><td>依赖冲突标记,批量执行即时发生</td><td>状态标签 + 批量执行即时发生</td><td class="hl">执行前逐仓库风险预览,支持演练 / 暂停 / 重试</td></tr>
+        <tr><td>单仓库深度操作</td><td class="hl">强:文件 diff、暂存、提交图完整</td><td>中:抽屉内可看文件与提交</td><td>中:右侧详情偏只读</td></tr>
+        <tr><td>实现成本</td><td>中:三栏 + 提交图渲染</td><td>低:表格与批量条为主要工作量</td><td>高:队列状态机与并发控制</td></tr>
+        <tr><td>推荐指数</td><td>★★★☆</td><td class="hl">★★★★</td><td>★★★★</td></tr>
+      </tbody>
+    </table>
+    <div class="note">
+      <b>我的建议:</b>以 <b>B 为主框架</b>(仓库总览是批量工具的核心),把 A 的"变更 / 提交记录 / diff"三栏下沉为单仓库详情页,再吸收 C 的"执行前预览 + 队列进度"作为批量操作的确认层。这样既保留 IDEA 的单仓库深度,又让批量路径足够短。
+    </div>
+  </section>
+
+  <footer>
+    <span>git-batch · prototypes</span><span>·</span><span>mock data only</span><span>·</span><span>选定方案后进入 Tauri 2 工程搭建</span>
+  </footer>
+</div>
+
+<script>
+(function () {
+  function fit(shot) {
+    var iframe = shot.querySelector('iframe');
+    if (!iframe) return;
+    var w = shot.clientWidth;
+    var scale = w / 1280;
+    iframe.style.transform = 'scale(' + scale + ')';
+    shot.style.height = Math.round(800 * scale) + 'px';
+  }
+  document.querySelectorAll('.shot[data-preview]').forEach(function (shot) {
+    fit(shot);
+    window.addEventListener('resize', function () { fit(shot); });
+  });
+})();
+</script>
+</body>
+</html>

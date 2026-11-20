@@ -1,0 +1,722 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>git-batch · 原型 C · 执行计划</title>
+<style>
+  :root{
+    --bg:#111214; --panel:#191a1d; --panel-2:#1f2125; --panel-3:#25272c;
+    --border:#2e3036; --border-soft:#25272b; --hover:#232529; --selected:#2b2620;
+    --text:#e6e2db; --text-sub:#aaa49a; --text-dim:#79756d;
+    --accent:#e8a13c; --accent-hi:#f2b45f; --accent-soft:rgba(232,161,60,.12);
+    --green:#7fbf87; --blue:#7aa7e8; --red:#e07a72; --amber:#e8a13c; --violet:#b392d8;
+    --ui:-apple-system,"SF Pro Text","Segoe UI","PingFang SC","Hiragino Sans GB",sans-serif;
+    --mono:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%;margin:0}
+  body{background:var(--bg);color:var(--text);font:13px/1.45 var(--ui);-webkit-font-smoothing:antialiased;overflow:hidden}
+  button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer}
+  input,select{font:inherit}
+  .ico{vertical-align:-2px;flex:none}
+  .app{display:flex;flex-direction:column;height:100vh;min-width:1180px}
+
+  /* 顶栏 */
+  .topbar{height:48px;display:flex;align-items:center;gap:13px;padding:0 16px;background:#16171a;border-bottom:1px solid var(--border);flex:none}
+  .brand{display:flex;align-items:center;gap:9px;font-weight:600;letter-spacing:.2px}
+  .brand .logo{width:23px;height:23px;border-radius:6px;background:linear-gradient(150deg,#e8a13c,#b26e1c);display:grid;place-items:center;color:#1b1206;font-family:var(--mono);font-size:9.5px;font-weight:700;letter-spacing:-.4px}
+  .brand .name{font-size:13px}
+  .brand .name small{color:var(--text-dim);font-weight:400;margin-left:6px;font-size:11.5px}
+  .env{display:flex;align-items:center;gap:7px;height:26px;padding:0 10px;border:1px solid var(--border);border-radius:6px;background:var(--panel);color:var(--text-sub);font-size:12px}
+  .env .dot{width:6px;height:6px;border-radius:50%;background:var(--green);box-shadow:0 0 0 3px rgba(127,191,135,.12)}
+  .topbar .spacer{flex:1}
+  .auto{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--text-sub);cursor:pointer;user-select:none}
+  .switch{width:30px;height:17px;border-radius:9px;background:#3a3c40;position:relative;transition:.16s;flex:none}
+  .switch::after{content:"";position:absolute;left:2px;top:2px;width:13px;height:13px;border-radius:50%;background:#c9c6bf;transition:.16s}
+  .switch.on{background:var(--accent)}
+  .switch.on::after{left:15px;background:#1b1206}
+  .ghost-btn{display:flex;align-items:center;gap:6px;height:28px;padding:0 11px;border:1px solid var(--border);border-radius:6px;color:var(--text-sub);font-size:12px;background:var(--panel)}
+  .ghost-btn:hover{border-color:#45474d;color:var(--text)}
+  .avatar{width:27px;height:27px;border-radius:50%;background:#2b2d31;border:1px solid #3b3d42;display:grid;place-items:center;font-size:11px;color:#c5c0b6;font-weight:600}
+
+  /* 主体三栏 */
+  .body{flex:1;display:grid;grid-template-columns:290px minmax(0,1fr) 358px;min-height:0}
+  .panel{display:flex;flex-direction:column;min-height:0}
+  .repos{background:var(--panel);border-right:1px solid var(--border)}
+  .composer-panel{background:var(--bg);min-width:0;position:relative}
+  .inspector{background:var(--panel);border-left:1px solid var(--border)}
+
+  /* 左：仓库选择 */
+  .panel-head{height:38px;display:flex;align-items:center;gap:7px;padding:0 12px;border-bottom:1px solid var(--border-soft);font-size:12px;font-weight:600;letter-spacing:.2px}
+  .panel-head .pill{background:#2c2d31;color:var(--text-sub);border-radius:9px;padding:0 6px;font-size:10.5px;line-height:16px;font-weight:500}
+  .panel-head .spacer{flex:1}
+  .mini{width:22px;height:22px;border-radius:4px;display:grid;place-items:center;color:var(--text-dim)}
+  .mini:hover{background:var(--hover);color:var(--text)}
+  .quick{display:flex;gap:6px;padding:8px 10px 4px}
+  .quick button{flex:1;height:24px;border-radius:4px;border:1px solid var(--border);color:var(--text-sub);font-size:11px}
+  .quick button:hover{background:var(--hover);color:var(--text)}
+  .repo-list{flex:1;overflow:auto;padding:4px 8px 10px;min-height:0}
+  .repo-item{display:flex;gap:8px;align-items:flex-start;padding:7px 8px;border-radius:6px;cursor:pointer;border:1px solid transparent}
+  .repo-item:hover{background:var(--hover)}
+  .repo-item.on{background:var(--selected);border-color:rgba(232,161,60,.22)}
+  .repo-item .cb{appearance:none;width:13px;height:13px;border:1.5px solid #5c5a54;border-radius:3px;margin:2px 0 0;cursor:pointer;position:relative;background:transparent;flex:none}
+  .repo-item .cb:checked{background:var(--accent);border-color:var(--accent)}
+  .repo-item .cb:checked::after{content:"";position:absolute;left:3.2px;top:0.8px;width:3px;height:6.4px;border:solid #1b1206;border-width:0 1.7px 1.7px 0;transform:rotate(45deg)}
+  .ri-main{min-width:0;flex:1}
+  .ri-top{display:flex;align-items:center;gap:6px}
+  .ri-name{font-size:12.5px;color:#ddd8cf;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .ri-top .dot{width:5px;height:5px;border-radius:50%;flex:none}
+  .dirty{background:var(--blue)}.conflict{background:var(--red)}.clean{background:#5b5953}.paused{background:#6e6b64}
+  .ri-sub{display:flex;align-items:center;gap:5px;color:var(--text-dim);font-size:11px;margin-top:2px;font-family:var(--mono);white-space:nowrap;overflow:hidden}
+  .ri-sub .chg{font-size:10px;color:#d8c59d;background:#2f2a21;border-radius:8px;padding:0 5px;line-height:14px;font-family:var(--ui)}
+  .repo-foot{border-top:1px solid var(--border-soft);padding:9px 12px;display:flex;align-items:center;gap:6px;background:#17181b;font-size:11.5px;color:var(--text-dim)}
+  .repo-foot b{color:var(--accent);font-family:var(--mono);font-size:12px}
+  .repo-foot .spacer{flex:1}
+
+  /* 中：编排 */
+  .compose-scroll{flex:1;overflow:auto;min-height:0}
+  .compose-head{padding:15px 22px 13px;border-bottom:1px solid var(--border-soft);display:flex;align-items:flex-start;gap:12px;background:radial-gradient(600px 120px at 12% -40%,rgba(232,161,60,.10),transparent 70%)}
+  .compose-head h2{margin:0;font-size:15px;font-weight:600;letter-spacing:.2px}
+  .compose-head p{margin:3px 0 0;font-size:11.5px;color:var(--text-dim)}
+  .compose-head .spacer{flex:1}
+  .kbd-hint{font-size:10.5px;color:var(--text-dim);display:flex;align-items:center;gap:5px;white-space:nowrap;margin-top:3px}
+  .kbd-hint kbd{font-family:var(--mono);font-size:9.5px;border:1px solid #3a3c40;border-radius:3px;padding:1px 4px;color:#9d988e;background:#1d1e21}
+  .section{padding:15px 22px;border-bottom:1px solid var(--border-soft)}
+  .sec-title{display:flex;align-items:center;gap:8px;margin-bottom:10px}
+  .sec-no{font-family:var(--mono);font-size:10.5px;color:var(--accent);border:1px solid rgba(232,161,60,.35);background:rgba(232,161,60,.08);border-radius:4px;padding:1px 5px;line-height:14px}
+  .sec-name{font-size:12px;font-weight:600;letter-spacing:.3px;color:#d6d1c8}
+  .sec-desc{margin-left:auto;font-size:11px;color:var(--text-dim)}
+  .ops{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+  .opcard{border:1px solid var(--border);background:var(--panel);border-radius:7px;padding:10px 11px;text-align:left;transition:border-color .14s,background .14s;position:relative}
+  .opcard:hover{border-color:#42444a;background:#1e1f23}
+  .opcard.on{border-color:rgba(232,161,60,.6);background:linear-gradient(180deg,rgba(232,161,60,.10),rgba(232,161,60,.03))}
+  .opcard.on::after{content:"";position:absolute;top:9px;right:9px;width:6px;height:6px;border-radius:50%;background:var(--accent)}
+  .opcard .oi{color:#a49e94;margin-bottom:7px}
+  .opcard.on .oi{color:var(--accent)}
+  .opcard .ot{font-size:12.5px;color:#e0dbd2;font-weight:500}
+  .opcard .od{font-size:10.5px;color:var(--text-dim);margin-top:2px;line-height:1.35}
+  .options{display:flex;flex-direction:column;gap:1px;border:1px solid var(--border);border-radius:7px;overflow:hidden;background:var(--border-soft)}
+  .opt{display:flex;align-items:center;gap:10px;padding:9px 12px;background:var(--panel);cursor:pointer}
+  .opt:hover{background:#1e1f23}
+  .opt .switch{transform:scale(.9);transform-origin:left center}
+  .opt-main{min-width:0;flex:1}
+  .opt-title{font-size:12px;color:#d8d3ca}
+  .opt-desc{font-size:10.5px;color:var(--text-dim);margin-top:1px}
+  .opt .sel{height:24px;border:1px solid var(--border);border-radius:4px;background:#191a1e;color:var(--text-sub);font-size:11.5px;padding:0 6px;outline:none}
+  .preview-head{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+  .preview-head .count{font-family:var(--mono);font-size:10.5px;color:var(--accent);background:var(--accent-soft);border-radius:8px;padding:0 6px;line-height:16px}
+  .preview-head .spacer{flex:1}
+  .preview-head .legend{display:flex;gap:10px;font-size:10.5px;color:var(--text-dim)}
+  .legend i{display:inline-block;width:6px;height:6px;border-radius:50%;margin-right:4px;vertical-align:1px}
+  .prow{display:grid;grid-template-columns:150px 1fr 84px minmax(0,1.5fr);align-items:center;gap:10px;height:38px;border-bottom:1px solid var(--border-soft);font-size:12px}
+  .prow.head{height:26px;color:var(--text-dim);font-size:10.5px;letter-spacing:.3px}
+  .prow .pname{display:flex;align-items:center;gap:7px;color:#ddd8cf;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .prow .pbranch{font-family:var(--mono);font-size:11px;color:#8f8a80;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .risk{display:inline-flex;align-items:center;gap:5px;height:19px;padding:0 6px;border-radius:4px;font-size:10.5px;white-space:nowrap}
+  .risk.safe{color:#93c99a;background:rgba(127,191,135,.10)}
+  .risk.warn{color:#e5c07a;background:rgba(232,161,60,.12)}
+  .risk.block{color:#efa8a2;background:rgba(224,122,114,.12)}
+  .risk .dot{width:4px;height:4px;border-radius:50%;background:currentColor}
+  .pnote{color:var(--text-dim);font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .empty{padding:24px;text-align:center;color:var(--text-dim);font-size:12px;border:1px dashed #35373c;border-radius:7px;margin-top:4px}
+
+  .compose-foot{border-top:1px solid var(--border);background:#17181b;padding:11px 22px;display:flex;align-items:center;gap:14px;flex:none}
+  .summary{display:flex;align-items:center;gap:16px;font-size:11.5px;color:var(--text-dim)}
+  .summary b{color:var(--text);font-family:var(--mono);font-size:13px;font-weight:600}
+  .summary .warn-txt{color:#d6b273}
+  .compose-foot .spacer{flex:1}
+  .cta{display:flex;align-items:center;gap:7px;height:32px;padding:0 16px;border-radius:6px;background:var(--accent);color:#1b1206;font-size:12.5px;font-weight:600}
+  .cta:hover{background:var(--accent-hi)}
+  .cta:disabled{background:#3a3225;color:#7d725e;cursor:not-allowed}
+
+  /* 队列 */
+  .queue-view{display:none;flex-direction:column;flex:1;min-height:0}
+  .queue-view.active{display:flex}
+  .compose-view{display:flex;flex-direction:column;flex:1;min-height:0}
+  .compose-view.hidden{display:none}
+  .queue-head{padding:16px 22px 14px;border-bottom:1px solid var(--border-soft);background:radial-gradient(600px 130px at 50% -60%,rgba(232,161,60,.12),transparent 70%)}
+  .queue-top{display:flex;align-items:center;gap:10px}
+  .queue-top h2{margin:0;font-size:15px;font-weight:600}
+  .queue-top .spacer{flex:1}
+  .qbtn{display:flex;align-items:center;gap:5px;height:26px;padding:0 9px;border-radius:5px;border:1px solid var(--border);color:var(--text-sub);font-size:11.5px}
+  .qbtn:hover{border-color:#45474d;color:var(--text)}
+  .qbtn.stop{color:#e6a29c;border-color:rgba(224,122,114,.35)}
+  .overall{display:flex;align-items:center;gap:10px;margin-top:13px}
+  .overall .track{flex:1;height:5px;border-radius:3px;background:#2b2c30;overflow:hidden}
+  .overall .fill{height:100%;width:0;border-radius:3px;background:linear-gradient(90deg,#c9852b,#f2b45f);transition:width .25s ease;position:relative;overflow:hidden}
+  .overall .fill::after{content:"";position:absolute;inset:0;background:linear-gradient(90deg,transparent,rgba(255,255,255,.28),transparent);animation:slide 1.4s infinite}
+  @keyframes slide{from{transform:translateX(-100%)}to{transform:translateX(100%)}}
+  .overall .pct{font-family:var(--mono);font-size:12px;color:#e3c48d;width:42px;text-align:right}
+  .qstats{display:flex;gap:18px;margin-top:10px;font-size:11px;color:var(--text-dim)}
+  .qstats b{font-family:var(--mono);font-size:12px;margin-left:4px}
+  .qstats .ok b{color:var(--green)}.qstats .run b{color:var(--accent)}.qstats .fail b{color:var(--red)}
+  .queue-list{flex:1;overflow:auto;padding:12px 22px 20px;min-height:0;display:flex;flex-direction:column;gap:7px}
+  .qcard{display:flex;gap:11px;padding:10px 12px;border:1px solid var(--border);background:var(--panel);border-radius:7px}
+  .qcard.running{border-color:rgba(232,161,60,.4);background:#1e1c18}
+  .qcard.fail{border-color:rgba(224,122,114,.35)}
+  .qcard.ok{opacity:.82}
+  .qcard .qico{width:22px;height:22px;border-radius:50%;display:grid;place-items:center;flex:none;margin-top:1px;background:#25262a;color:var(--text-dim)}
+  .qcard.running .qico{background:var(--accent-soft);color:var(--accent)}
+  .qcard.ok .qico{background:rgba(127,191,135,.12);color:var(--green)}
+  .qcard.fail .qico{background:rgba(224,122,114,.12);color:var(--red)}
+  .spin{animation:spin 1s linear infinite}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .qmain{flex:1;min-width:0}
+  .qtop{display:flex;align-items:center;gap:8px}
+  .qtop b{font-size:12.5px;font-weight:500;color:#e2ddd4}
+  .qtop .b{font-family:var(--mono);font-size:10.5px;color:#8b867c;background:#25262a;border-radius:3px;padding:0 4px}
+  .qtop .st{margin-left:auto;font-size:10.5px;color:var(--text-dim)}
+  .qcard.ok .st{color:var(--green)}.qcard.fail .st{color:var(--red)}.qcard.running .st{color:var(--accent)}
+  .qbar{height:3px;border-radius:2px;background:#2b2c30;margin:7px 0 5px;overflow:hidden}
+  .qbar i{display:block;height:100%;width:0;background:var(--green);transition:width .2s linear}
+  .qcard.running .qbar i{background:var(--accent)}
+  .qcard.fail .qbar i{background:var(--red)}
+  .qnote{font-size:10.5px;color:var(--text-dim);display:flex;align-items:center;gap:8px}
+  .qnote .retry{margin-left:auto;color:#e5c07a;font-size:10.5px;text-decoration:underline;text-underline-offset:2px}
+  .queue-foot{border-top:1px solid var(--border);background:#17181b;padding:10px 22px;display:flex;align-items:center;gap:10px;flex:none}
+  .queue-foot .spacer{flex:1}
+
+  /* 右：详情 */
+  .insp-head{height:38px;display:flex;align-items:center;gap:7px;padding:0 12px;border-bottom:1px solid var(--border-soft);font-size:12px;font-weight:600}
+  .insp-head .spacer{flex:1}
+  .insp-body{flex:1;overflow:auto;min-height:0}
+  .isec{padding:12px 14px;border-bottom:1px solid var(--border-soft)}
+  .isec h4{margin:0 0 8px;font-size:10.5px;letter-spacing:.5px;color:var(--text-dim);font-weight:600;text-transform:uppercase}
+  .irepo{display:flex;align-items:center;gap:8px;margin-bottom:4px}
+  .irepo .nm{font-size:14px;font-weight:600}
+  .irepo .spacer{flex:1}
+  .kv{display:flex;justify-content:space-between;gap:10px;font-size:11.5px;padding:3px 0;color:var(--text-dim)}
+  .kv b{font-weight:500;color:#d8d3ca}
+  .kv .mono{font-family:var(--mono);font-size:11px}
+  .chips{display:flex;gap:6px;margin-top:8px;flex-wrap:wrap}
+  .chip{display:inline-flex;align-items:center;gap:4px;height:20px;padding:0 7px;border-radius:4px;font-size:10.5px;background:#26272b;color:#a8a298;font-family:var(--mono)}
+  .chip.up{color:#9dc9a3;background:rgba(127,191,135,.10)}
+  .chip.down{color:#9db9e6;background:rgba(122,167,232,.10)}
+  .chip.bad{color:#e8a49d;background:rgba(224,122,114,.10)}
+  .frow{display:flex;align-items:center;gap:7px;height:24px;font-size:11.5px}
+  .fstat{width:12px;font-family:var(--mono);font-size:10.5px;font-weight:700;text-align:center}
+  .fstat.M{color:var(--blue)}.fstat.A{color:var(--green)}.fstat.D{color:var(--red)}.fstat.U{color:var(--amber)}
+  .frow .p{color:#c6c1b8;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .citem{display:flex;gap:8px;padding:4px 0;font-size:11.5px}
+  .citem .d{width:6px;height:6px;border-radius:50%;background:var(--accent);margin-top:5px;flex:none}
+  .citem .cm{color:#c9c4bb;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .citem .ch{font-size:10px;color:var(--text-dim);margin-top:1px;font-family:var(--mono)}
+  .mini-diff{border:1px solid var(--border);border-radius:6px;overflow:hidden;font-family:var(--mono);font-size:10.5px;line-height:1.7;max-height:132px;overflow:auto;background:#15161a}
+  .mdline{padding:0 8px;white-space:pre;color:#8b867c}
+  .mdline.add{background:rgba(127,191,135,.10);color:#a9d1ae}
+  .mdline.del{background:rgba(224,122,114,.09);color:#e2aaa4}
+  .mdline.hunk{background:rgba(122,167,232,.08);color:#93b3dd}
+  .insp-foot{border-top:1px solid var(--border-soft);padding:9px 12px;display:flex;gap:7px;flex:none}
+  .insp-foot button{flex:1;height:28px;border:1px solid var(--border);border-radius:5px;color:var(--text-sub);font-size:11.5px;display:flex;align-items:center;justify-content:center;gap:5px}
+  .insp-foot button:hover{background:var(--hover);color:var(--text)}
+
+  ::-webkit-scrollbar{width:10px;height:10px}
+  ::-webkit-scrollbar-thumb{background:#34363b;border-radius:5px;border:2px solid transparent;background-clip:content-box}
+  ::-webkit-scrollbar-thumb:hover{background:#414349;background-clip:content-box}
+  ::-webkit-scrollbar-track{background:transparent}
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="topbar">
+    <div class="brand"><span class="logo">gb</span><span class="name">git-batch<small>批量 Git 编排</small></span></div>
+    <div class="env"><span class="dot"></span>rusthing 工作区 · 8 个仓库</div>
+    <span class="spacer"></span>
+    <label class="auto" id="autoWrap"><span class="switch on" id="autoSwitch"></span>每 5 分钟自动 Fetch</label>
+    <button class="ghost-btn" id="helpBtn"><span data-icon="info"></span>批量操作说明</button>
+    <span class="avatar">林</span>
+  </header>
+
+  <div class="body">
+    <!-- 左：仓库选择 -->
+    <aside class="panel repos">
+      <div class="panel-head">
+        <span>选择仓库</span><span class="pill" id="repoCount">8</span>
+        <span class="spacer"></span>
+        <button class="mini" id="scanBtn" title="重新扫描"></button>
+      </div>
+      <div class="quick">
+        <button id="selAll">全选</button>
+        <button id="selDirty">仅选有变更</button>
+        <button id="selClear">清空</button>
+      </div>
+      <div class="repo-list" id="repoList"></div>
+      <div class="repo-foot">
+        <span>已选 <b id="selNum">3</b> / 8</span>
+        <span class="spacer"></span>
+        <span id="impactText">影响 3 个仓库</span>
+      </div>
+    </aside>
+
+    <!-- 中：编排 / 队列 -->
+    <section class="panel composer-panel">
+      <div class="compose-view" id="composeView">
+        <div class="compose-scroll">
+          <div class="compose-head">
+            <div>
+              <h2>批量操作编排</h2>
+              <p>先预览每个仓库的执行风险，确认无误后再生成队列</p>
+            </div>
+            <span class="spacer"></span>
+            <div class="kbd-hint">生成计划 <kbd>⌘</kbd><kbd>⇧</kbd><kbd>↵</kbd></div>
+          </div>
+
+          <div class="section">
+            <div class="sec-title"><span class="sec-no">01</span><span class="sec-name">选择操作</span><span class="sec-desc">同一批次使用同一种 Git 操作</span></div>
+            <div class="ops" id="ops">
+              <button class="opcard" data-op="fetch" id="opFetch">
+                <div class="oi" data-icon="refresh-cw"></div>
+                <div class="ot">Fetch</div><div class="od">拉取远端引用，不改变工作区</div>
+              </button>
+              <button class="opcard on" data-op="pull" id="opPull">
+                <div class="oi" data-icon="arrow-down-to-line"></div>
+                <div class="ot">Pull</div><div class="od">快进合并远端提交到本地</div>
+              </button>
+              <button class="opcard" data-op="push">
+                <div class="oi" data-icon="arrow-up-from-line"></div>
+                <div class="ot">Push</div><div class="od">推送本地提交到上游分支</div>
+              </button>
+              <button class="opcard" data-op="commit">
+                <div class="oi" data-icon="git-commit"></div>
+                <div class="ot">批量提交</div><div class="od">用同一提交信息提交变更</div>
+              </button>
+            </div>
+          </div>
+
+          <div class="section">
+            <div class="sec-title"><span class="sec-no">02</span><span class="sec-name">执行选项</span><span class="sec-desc">仅对本次队列生效</span></div>
+            <div class="options">
+              <div class="opt" data-opt="ff">
+                <span class="switch on"></span>
+                <div class="opt-main"><div class="opt-title">仅允许快进合并（--ff-only）</div><div class="opt-desc">无法快进时跳过该仓库，不产生合并提交</div></div>
+              </div>
+              <div class="opt" data-opt="stash">
+                <span class="switch on"></span>
+                <div class="opt-main"><div class="opt-title">执行前自动 Stash 本地变更</div><div class="opt-desc">任务结束后自动恢复，冲突时保留 stash 并告警</div></div>
+              </div>
+              <div class="opt" data-opt="prune">
+                <span class="switch"></span>
+                <div class="opt-main"><div class="opt-title">修剪已删除的远端分支（--prune）</div><div class="opt-desc">清理 origin 上已不存在的分支引用</div></div>
+              </div>
+              <div class="opt">
+                <div class="opt-main"><div class="opt-title">并发执行的仓库数</div><div class="opt-desc">网络操作建议不超过 4，避免触发远端限流</div></div>
+                <select class="sel" id="concurrency"><option>2</option><option selected>4</option><option>8</option></select>
+              </div>
+            </div>
+          </div>
+
+          <div class="section" style="border-bottom:0">
+            <div class="sec-title"><span class="sec-no">03</span><span class="sec-name">执行预览</span><span class="count" id="previewCount">3 个仓库</span><span class="spacer" style="flex:1"></span>
+              <div class="legend"><span><i style="background:#7fbf87"></i>安全</span><span><i style="background:#e8a13c"></i>注意</span><span><i style="background:#e07a72"></i>阻塞</span></div>
+            </div>
+            <div class="prow head"><span>仓库</span><span>分支</span><span>风险</span><span>预期动作</span></div>
+            <div id="previewList"></div>
+          </div>
+        </div>
+
+        <div class="compose-foot">
+          <div class="summary">
+            <span>将影响 <b id="footCount">3</b> 个仓库</span>
+            <span id="footRisk" class="warn-txt">1 个需要关注</span>
+          </div>
+          <span class="spacer"></span>
+          <button class="qbtn" id="dryRun"><span data-icon="shield-alert"></span>仅演练</button>
+          <button class="cta" id="planBtn"><span data-icon="zap"></span>生成执行计划</button>
+        </div>
+      </div>
+
+      <!-- 队列视图 -->
+      <div class="queue-view" id="queueView">
+        <div class="queue-head">
+          <div class="queue-top">
+            <h2 id="queueTitle">执行中 · Pull</h2>
+            <span class="chip" id="queueMode">--ff-only · 并发 4</span>
+            <span class="spacer"></span>
+            <button class="qbtn" id="pauseBtn"><span data-icon="pause"></span>暂停</button>
+            <button class="qbtn stop" id="cancelBtn"><span data-icon="square"></span>全部取消</button>
+          </div>
+          <div class="overall">
+            <div class="track"><div class="fill" id="overallFill"></div></div>
+            <span class="pct" id="overallPct">0%</span>
+          </div>
+          <div class="qstats">
+            <span class="ok">成功<b id="statOk">0</b></span>
+            <span class="run">进行中<b id="statRun">0</b></span>
+            <span class="fail">失败<b id="statFail">0</b></span>
+            <span>跳过<b id="statSkip">0</b></span>
+          </div>
+        </div>
+        <div class="queue-list" id="queueList"></div>
+        <div class="queue-foot">
+          <button class="qbtn" id="backBtn"><span data-icon="arrow-left"></span>返回编排</button>
+          <button class="qbtn" id="retryAll"><span data-icon="rotate-ccw"></span>重试失败项</button>
+          <span class="spacer"></span>
+          <span style="font-size:11px;color:var(--text-dim)" id="queueHint">任务在后台执行，可关闭窗口继续运行</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- 右：仓库详情 -->
+    <aside class="panel inspector">
+      <div class="insp-head">
+        <span data-icon="git-branch"></span>仓库详情
+        <span class="spacer"></span>
+        <button class="mini" id="inspMore" title="更多"></button>
+      </div>
+      <div class="insp-body">
+        <div class="isec">
+          <div class="irepo"><span style="color:#8c877d" id="inspFolder"></span><span class="nm" id="inspName">adm-rs</span><span class="spacer"></span><span class="chip" id="inspState">有变更</span></div>
+          <div class="kv"><span>分支</span><b class="mono" id="inspBranch">main</b></div>
+          <div class="kv"><span>上游</span><b class="mono" id="inspUpstream">origin/main</b></div>
+          <div class="kv"><span>最近提交</span><b id="inspLast">8 分钟前</b></div>
+          <div class="chips" id="inspChips"></div>
+        </div>
+        <div class="isec">
+          <h4>本地变更 <span id="inspFileCount" style="color:#d8c59d"></span></h4>
+          <div id="inspFiles"></div>
+        </div>
+        <div class="isec">
+          <h4>最近提交</h4>
+          <div id="inspCommits"></div>
+        </div>
+        <div class="isec" style="border-bottom:0">
+          <h4>变更预览</h4>
+          <div class="mini-diff" id="inspDiff"></div>
+        </div>
+      </div>
+      <div class="insp-foot">
+        <button id="openRepo"><span data-icon="external-link"></span>打开仓库</button>
+        <button id="singleSync"><span data-icon="refresh-cw"></span>仅同步此仓库</button>
+      </div>
+    </aside>
+  </div>
+</div>
+
+<script src="assets/ui.js"></script>
+<script>
+(function () {
+  var $ = function (id) { return document.getElementById(id); };
+  var state = {
+    selected: ['adm-rs', 'dtw-rs', 'msg'],
+    inspect: 'adm-rs',
+    op: 'pull',
+    mode: 'compose',
+    paused: false,
+    queue: [],
+    timer: null
+  };
+  var OPS = {
+    fetch: { label: 'Fetch', desc: '拉取远端引用' },
+    pull: { label: 'Pull', desc: '快进合并远端提交' },
+    push: { label: 'Push', desc: '推送本地提交' },
+    commit: { label: '批量提交', desc: '提交本地变更' }
+  };
+
+  document.querySelectorAll('[data-icon]').forEach(function (el) {
+    el.innerHTML = icon(el.getAttribute('data-icon'), 14);
+  });
+  $('scanBtn').innerHTML = icon('refresh-cw', 13);
+  $('inspMore').innerHTML = icon('more-horizontal', 14);
+  $('inspFolder').innerHTML = icon('folder', 14);
+
+  function stateOf(r) {
+    if (r.paused) return { cls: 'paused', text: '已暂停' };
+    if (r.state === 'conflict') return { cls: 'conflict', text: '冲突' };
+    if (r.changes > 0) return { cls: 'dirty', text: '有变更' };
+    return { cls: 'clean', text: '干净' };
+  }
+
+  function riskFor(r) {
+    if (r.paused) return { cls: 'warn', label: '跳过', note: '仓库已暂停自动同步，本次队列将跳过' };
+    if (r.state === 'conflict') return { cls: 'block', label: '阻塞', note: '存在未解决的合并冲突，任务将失败并跳过' };
+    if (state.op === 'pull') {
+      if (r.changes > 0) return { cls: 'warn', label: '注意', note: '本地有 ' + r.changes + ' 个变更，执行前自动 stash' };
+      if (r.behind > 0) return { cls: 'safe', label: '安全', note: '快进合并 ' + r.behind + ' 个提交' };
+      return { cls: 'safe', label: '安全', note: '已是最新，无操作' };
+    }
+    if (state.op === 'push') {
+      if (r.changes > 0) return { cls: 'warn', label: '注意', note: '仍有 ' + r.changes + ' 个未提交文件' };
+      if (r.ahead > 0) return { cls: 'safe', label: '安全', note: '推送 ' + r.ahead + ' 个提交到 origin/' + r.branch };
+      return { cls: 'safe', label: '安全', note: '无待推送提交' };
+    }
+    if (state.op === 'commit') {
+      if (r.changes > 0) return { cls: 'warn', label: '注意', note: '将提交 ' + r.changes + ' 个文件，使用统一提交信息' };
+      return { cls: 'safe', label: '安全', note: '工作区干净，跳过' };
+    }
+    return { cls: 'safe', label: '安全', note: r.behind > 0 ? '获取 ' + r.behind + ' 个远端提交引用' : '无新增远端引用' };
+  }
+
+  function renderRepos() {
+    $('repoList').innerHTML = MOCK.repos.map(function (r) {
+      var st = stateOf(r);
+      var on = state.selected.indexOf(r.id) >= 0;
+      var risk = riskFor(r);
+      return '<div class="repo-item ' + (on ? 'on' : '') + '" data-id="' + r.id + '">' +
+        '<input type="checkbox" class="cb" data-check="' + r.id + '" ' + (on ? 'checked' : '') + '>' +
+        '<div class="ri-main">' +
+          '<div class="ri-top"><span class="dot ' + st.cls + '"></span><span class="ri-name">' + r.name + '</span>' +
+            (risk.cls === 'block' ? '<span style="margin-left:auto;color:#e8a49d;font-size:10px">冲突</span>' : '') +
+            (r.changes && risk.cls !== 'block' ? '<span class="chg" style="margin-left:auto">' + r.changes + '</span>' : '') +
+          '</div>' +
+          '<div class="ri-sub">' + icon('git-branch', 10) + r.branch +
+            (r.behind ? ' · ↓' + r.behind : '') + (r.ahead ? ' · ↑' + r.ahead : '') + '</div>' +
+        '</div>' +
+      '</div>';
+    }).join('');
+
+    $('repoList').querySelectorAll('.repo-item').forEach(function (row) {
+      row.addEventListener('click', function (e) {
+        if (state.mode === 'queue') return;
+        var id = row.getAttribute('data-id');
+        if (e.target.closest('[data-check]')) {
+          toggleSelect(id, e.target.checked);
+        } else {
+          state.inspect = id;
+          if (state.selected.indexOf(id) < 0) state.selected.push(id);
+        }
+        renderAll();
+      });
+    });
+  }
+
+  function toggleSelect(id, on) {
+    var i = state.selected.indexOf(id);
+    if (on && i < 0) state.selected.push(id);
+    if (!on && i >= 0) state.selected.splice(i, 1);
+  }
+
+  function renderPreview() {
+    var repos = state.selected.map(repoById);
+    $('previewCount').textContent = repos.length + ' 个仓库';
+    $('footCount').textContent = repos.length;
+    $('selNum').textContent = repos.length;
+    $('impactText').textContent = '影响 ' + repos.length + ' 个仓库';
+    var warnings = repos.filter(function (r) { return riskFor(r).cls !== 'safe'; }).length;
+    $('footRisk').textContent = warnings ? warnings + ' 个需要关注' : '全部可安全执行';
+    $('footRisk').className = warnings ? 'warn-txt' : '';
+    $('planBtn').disabled = repos.length === 0;
+
+    if (!repos.length) {
+      $('previewList').innerHTML = '<div class="empty">请先在左侧勾选需要执行操作的仓库</div>';
+      return;
+    }
+    $('previewList').innerHTML = repos.map(function (r) {
+      var risk = riskFor(r);
+      return '<div class="prow">' +
+        '<span class="pname">' + icon('folder', 13) + r.name + '</span>' +
+        '<span class="pbranch">' + r.branch + '</span>' +
+        '<span><span class="risk ' + risk.cls + '"><span class="dot"></span>' + risk.label + '</span></span>' +
+        '<span class="pnote">' + risk.note + '</span>' +
+      '</div>';
+    }).join('');
+  }
+
+  function renderInspector() {
+    var r = repoById(state.inspect);
+    var st = stateOf(r);
+    $('inspName').textContent = r.name;
+    $('inspBranch').textContent = r.branch;
+    $('inspUpstream').textContent = 'origin/' + r.branch;
+    $('inspLast').textContent = r.last.time;
+    $('inspState').textContent = st.text;
+    $('inspState').style.color = st.cls === 'conflict' ? '#e8a49d' : st.cls === 'dirty' ? '#9db9e6' : '#aaa49a';
+    $('inspChips').innerHTML =
+      (r.ahead ? '<span class="chip up">↑ ' + r.ahead + ' 待推送</span>' : '') +
+      (r.behind ? '<span class="chip down">↓ ' + r.behind + ' 待拉取</span>' : '') +
+      (r.state === 'conflict' ? '<span class="chip bad">1 个冲突文件</span>' : '') +
+      (r.state === 'clean' ? '<span class="chip">与上游同步</span>' : '');
+    $('inspFileCount').textContent = r.changes ? '· ' + r.changes + ' 个文件' : '· 无';
+    $('inspFiles').innerHTML = r.changes ? MOCK.files.slice(0, Math.min(r.changes, 5)).map(function (f) {
+      return '<div class="frow"><span class="fstat ' + f.status + '">' + f.status + '</span><span class="p">' + f.path + '</span></div>';
+    }).join('') : '<div style="font-size:11.5px;color:#79756d;padding:4px 0">工作区干净</div>';
+    $('inspCommits').innerHTML = MOCK.commits.slice(0, 3).map(function (c) {
+      return '<div class="citem"><span class="d"></span><div style="min-width:0"><div class="cm">' + c.msg + '</div><div class="ch">' + c.hash + ' · ' + c.author + ' · ' + c.time + '</div></div></div>';
+    }).join('');
+    var diff = MOCK.files[0].diff.split('\n').slice(0, 9);
+    $('inspDiff').innerHTML = diff.map(function (line) {
+      var cls = line.indexOf('@@') === 0 ? 'hunk' : line.charAt(0) === '+' ? 'add' : line.charAt(0) === '-' ? 'del' : '';
+      return '<div class="mdline ' + cls + '">' + esc(line || ' ') + '</div>';
+    }).join('');
+  }
+
+  function renderAll() {
+    renderRepos();
+    renderPreview();
+    renderInspector();
+  }
+
+  function renderQueue() {
+    var total = state.queue.length;
+    var done = state.queue.filter(function (q) { return q.status === 'ok' || q.status === 'fail' || q.status === 'skip'; }).length;
+    var pct = total ? Math.round(state.queue.reduce(function (s, q) { return s + (q.status === 'ok' || q.status === 'fail' || q.status === 'skip' ? 100 : q.p); }, 0) / total) : 0;
+    $('overallFill').style.width = pct + '%';
+    $('overallPct').textContent = pct + '%';
+    $('statOk').textContent = state.queue.filter(function (q) { return q.status === 'ok'; }).length;
+    $('statRun').textContent = state.queue.filter(function (q) { return q.status === 'running'; }).length;
+    $('statFail').textContent = state.queue.filter(function (q) { return q.status === 'fail'; }).length;
+    $('statSkip').textContent = state.queue.filter(function (q) { return q.status === 'skip' || q.status === 'cancel'; }).length;
+
+    $('queueList').innerHTML = state.queue.map(function (q, i) {
+      var iconName = q.status === 'ok' ? 'check' : q.status === 'fail' ? 'x' : q.status === 'running' ? 'loader' : q.status === 'cancel' || q.status === 'skip' ? 'pause' : 'clock';
+      var cls = q.status === 'running' ? 'spin' : '';
+      var statusText = { pending: '等待中', running: '执行中', ok: '成功', fail: '失败', skip: '已跳过', cancel: '已取消' }[q.status];
+      var note = q.note || (q.status === 'pending' ? '等待前序仓库完成' : '');
+      return '<div class="qcard ' + q.status + '">' +
+        '<span class="qico">' + icon(iconName, 13, cls) + '</span>' +
+        '<div class="qmain">' +
+          '<div class="qtop"><b>' + q.repo.name + '</b><span class="b">' + q.repo.branch + '</span>' +
+            '<span class="st">' + statusText + (q.status === 'ok' ? ' · ' + q.cost + 's' : '') + '</span></div>' +
+          '<div class="qbar"><i style="width:' + (q.status === 'ok' || q.status === 'fail' ? 100 : q.p) + '%"></i></div>' +
+          '<div class="qnote"><span>' + note + '</span>' +
+            (q.status === 'fail' ? '<button class="retry" data-retry="' + i + '">重试</button>' : '') + '</div>' +
+        '</div>' +
+      '</div>';
+    }).join('');
+
+    $('queueList').querySelectorAll('[data-retry]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        var q = state.queue[Number(b.getAttribute('data-retry'))];
+        q.status = 'pending'; q.p = 0; q.note = '';
+        renderQueue();
+        startTimer();
+      });
+    });
+  }
+
+  function startQueue() {
+    var repos = state.selected.map(repoById);
+    if (!repos.length) { toast('请先勾选仓库', 'warn'); return; }
+    state.queue = repos.map(function (r) {
+      var risk = riskFor(r);
+      return { repo: r, status: 'pending', p: 0, note: risk.cls === 'block' ? '等待执行（预计失败）' : '', cost: (0.8 + Math.random() * 1.4).toFixed(1) };
+    });
+    state.mode = 'queue';
+    state.paused = false;
+    $('composeView').classList.add('hidden');
+    $('queueView').classList.add('active');
+    $('queueTitle').textContent = '执行中 · ' + OPS[state.op].label;
+    $('queueMode').textContent = '--ff-only · 并发 4';
+    $('pauseBtn').innerHTML = icon('pause', 13) + '暂停';
+    renderQueue();
+    startTimer();
+  }
+
+  function startTimer() {
+    if (state.timer) clearInterval(state.timer);
+    state.timer = setInterval(tick, 240);
+  }
+
+  function tick() {
+    if (state.paused) return;
+    var running = state.queue.filter(function (q) { return q.status === 'running'; })[0];
+    if (!running) {
+      running = state.queue.filter(function (q) { return q.status === 'pending'; })[0];
+      if (!running) { finishQueue(); return; }
+      running.status = 'running';
+      running.note = '正在 ' + OPS[state.op].label + ' ' + running.repo.name + '…';
+    }
+    running.p = Math.min(100, running.p + 14 + Math.random() * 16);
+    if (running.p >= 100) {
+      if (running.repo.paused) {
+        running.status = 'skip';
+        running.note = '仓库已暂停，已跳过';
+      } else if (running.repo.state === 'conflict') {
+        running.status = 'fail';
+        running.note = '存在未解决的合并冲突，任务终止（工作区未变更）';
+      } else {
+        running.status = 'ok';
+        running.note = state.op === 'pull' ? '已快进 ' + (running.repo.behind || 0) + ' 个提交' :
+          state.op === 'push' ? '已推送 ' + (running.repo.ahead || 0) + ' 个提交' :
+          state.op === 'commit' ? '已提交 ' + (running.repo.changes || 0) + ' 个文件' : '远端引用已更新';
+      }
+    }
+    renderQueue();
+  }
+
+  function finishQueue() {
+    if (state.timer) { clearInterval(state.timer); state.timer = null; }
+    var fail = state.queue.filter(function (q) { return q.status === 'fail'; }).length;
+    $('queueHint').textContent = fail ? '队列执行完成，有 ' + fail + ' 个仓库失败，可在上方重试' : '队列执行完成，全部成功';
+    toast(fail ? '批量任务完成，' + fail + ' 个仓库失败' : '批量任务完成，全部成功', fail ? 'warn' : '');
+  }
+
+  function backToCompose() {
+    if (state.timer) { clearInterval(state.timer); state.timer = null; }
+    state.mode = 'compose';
+    state.queue = [];
+    state.paused = false;
+    $('queueView').classList.remove('active');
+    $('composeView').classList.remove('hidden');
+    renderAll();
+  }
+
+  // 事件
+  $('ops').querySelectorAll('.opcard').forEach(function (card) {
+    card.addEventListener('click', function () {
+      state.op = card.getAttribute('data-op');
+      $('ops').querySelectorAll('.opcard').forEach(function (c) { c.classList.remove('on'); });
+      card.classList.add('on');
+      renderAll();
+    });
+  });
+  document.querySelectorAll('.opt[data-opt]').forEach(function (opt) {
+    opt.addEventListener('click', function () {
+      opt.querySelector('.switch').classList.toggle('on');
+    });
+  });
+  $('selAll').addEventListener('click', function () {
+    state.selected = MOCK.repos.map(function (r) { return r.id; });
+    renderAll();
+  });
+  $('selDirty').addEventListener('click', function () {
+    state.selected = MOCK.repos.filter(function (r) { return r.changes > 0; }).map(function (r) { return r.id; });
+    renderAll();
+  });
+  $('selClear').addEventListener('click', function () {
+    state.selected = [];
+    renderAll();
+  });
+  $('planBtn').addEventListener('click', startQueue);
+  $('backBtn').addEventListener('click', backToCompose);
+  $('pauseBtn').addEventListener('click', function () {
+    state.paused = !state.paused;
+    $('pauseBtn').innerHTML = icon(state.paused ? 'play' : 'pause', 13) + (state.paused ? '继续' : '暂停');
+    $('queueTitle').textContent = state.paused ? '已暂停 · ' + OPS[state.op].label : '执行中 · ' + OPS[state.op].label;
+    toast(state.paused ? '队列已暂停，当前仓库执行完当前步骤后挂起' : '队列已继续');
+  });
+  $('cancelBtn').addEventListener('click', function () {
+    if (state.timer) { clearInterval(state.timer); state.timer = null; }
+    state.queue.forEach(function (q) {
+      if (q.status === 'pending' || q.status === 'running') { q.status = 'cancel'; q.note = '用户取消'; }
+    });
+    renderQueue();
+    $('queueHint').textContent = '队列已取消，未执行的仓库保持不变';
+    toast('已取消剩余任务', 'warn');
+  });
+  $('retryAll').addEventListener('click', function () {
+    var n = 0;
+    state.queue.forEach(function (q) { if (q.status === 'fail') { q.status = 'pending'; q.p = 0; q.note = ''; n++; } });
+    if (!n) { toast('没有失败项需要重试', 'warn'); return; }
+    renderQueue();
+    startTimer();
+  });
+  $('dryRun').addEventListener('click', function () {
+    toast('演练完成：' + state.selected.length + ' 个仓库无新增阻塞项');
+  });
+  $('scanBtn').addEventListener('click', function () { toast('已重新扫描工作区，共 8 个仓库'); });
+  $('helpBtn').addEventListener('click', function () { toast('批量 Git 操作规范与风险说明', 'warn'); });
+  $('autoWrap').addEventListener('click', function (e) {
+    if (e.target.id === 'autoSwitch') return;
+    $('autoSwitch').classList.toggle('on');
+  });
+  $('autoSwitch').addEventListener('click', function (e) { e.stopPropagation(); $('autoSwitch').classList.toggle('on'); });
+  $('openRepo').addEventListener('click', function () { toast('已在文件管理器中打开 ' + repoById(state.inspect).name, 'warn'); });
+  $('singleSync').addEventListener('click', function () { toast(repoById(state.inspect).name + ' 已加入单独同步队列'); });
+  $('inspMore').addEventListener('click', function () { toast('仓库操作：切换分支 / 拉取 / 推送 / 忽略', 'warn'); });
+
+  renderAll();
+})();
+</script>
+</body>
+</html>
